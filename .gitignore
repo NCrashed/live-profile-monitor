@@ -1,2 +1,4 @@
 .stack-work
 *.sublime-workspace
+.cabal-sandbox
+cabal.sandbox.config

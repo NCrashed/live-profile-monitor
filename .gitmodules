@@ -1,0 +1,4 @@
+[submodule "ghc-events"]
+	path = ghc-events
+	url = https://github.com/kvelicka/ghc-events.git
+	branch = incremental
