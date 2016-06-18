@@ -29,3 +29,11 @@ library
 source-repository head
   type:     git
   location: https://github.com/ncrashed/live-profile-monitor
+
+test-suite test-monitor
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  build-depends: 
+      base
+    , live-profile-monitor
