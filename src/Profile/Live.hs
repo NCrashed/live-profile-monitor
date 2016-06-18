@@ -1,8 +1,11 @@
 module Profile.Live(
+  -- * Options
     LiveProfileOpts
   , defaultLiveProfileOpts
+  -- * Basic API
   , LiveProfiler
   , initLiveProfile
+  , stopLiveProfile
   ) where 
 
 import Data.Monoid
@@ -30,7 +33,14 @@ data LiveProfiler = LiveProfiler {
 initLiveProfile :: LiveProfileOpts -> IO LiveProfiler
 initLiveProfile opts = do
   initialParser <- ensureEvengLogFile 
-  error "initLiveProfile: unimplemented"
+  return LiveProfiler
+
+-- | Destroy live profiler.
+--
+-- The function closes all sockets, stops all related threads and
+-- restores eventlog sink. 
+stopLiveProfile :: LiveProfiler -> IO ()
+stopLiveProfile = error "stopLiveProfile: unimplemented"
 
 -- | Tries to load data from eventlog default file and construct
 -- incremental parser. Throws if there is no eventlog file. 

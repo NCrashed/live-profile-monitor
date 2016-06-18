@@ -34,6 +34,7 @@ test-suite test-monitor
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Main.hs
+  ghc-options:      -eventlog -rtsopts
   build-depends: 
       base
     , live-profile-monitor

@@ -1,7 +1,8 @@
 module Main where
 
-import System.Exit (exitFailure)
+import Control.Exception (bracket)
+import Profile.Live
+import Debug.Trace 
 
-main = do
-    putStrLn "This test always fails!"
-    exitFailure
+main = bracket (initLiveProfile defaultLiveProfileOpts) stopLiveProfile $ const $ do
+  traceEventIO "MyEvent"
