@@ -32,5 +32,5 @@ cabal build
 
 * Test:
 ```
-cabal test --test-options="+RTS -l"
+cabal test --test-options="+RTS -lm"
 ```

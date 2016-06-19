@@ -12,6 +12,7 @@ module Profile.Live(
 
 import Control.Concurrent (ThreadId, forkIO, throwTo, yield)
 import Control.Concurrent.MVar 
+import Control.Concurrent.STM
 import Control.DeepSeq 
 import Control.Exception (bracket, Exception, AsyncException(..))
 import Control.Monad (void)
@@ -47,11 +48,17 @@ defaultLiveProfileOpts = LiveProfileOpts {
     eventLogChunkSize = 1024 * 1024 -- 1 Mb
   }
 
+-- | Termination mutex, all threads are stopped when the mvar is filled
+type Termination = MVar ()
+
 -- | Live profiler state
 data LiveProfiler = LiveProfiler {
   -- | Id of thread that pipes from memory into incremental parser
   eventLogPipeThread :: ThreadId
-, eventLogTerminate :: MVar ()
+  -- | Id of thread that performs incremental parsing
+, eventLogParserThread :: ThreadId 
+  -- | Termination mutex, all threads are stopped when the mvar is filled
+, eventLogTerminate :: Termination
 }
 
 -- | Initialize live profile monitor that accepts connections
@@ -59,11 +66,13 @@ data LiveProfiler = LiveProfiler {
 initLiveProfile :: LiveProfileOpts -> IO LiveProfiler
 initLiveProfile opts = do
   initialParser <- ensureEvengLogFile 
-  parserRef <- newIORef initialParser
+  parserRef <- newTVarIO initialParser
   termVar <- newEmptyMVar
   pipeId <- redirectEventlog opts termVar parserRef
+  parserId <- parserThread opts termVar parserRef
   return LiveProfiler {
       eventLogPipeThread = pipeId
+    , eventLogParserThread = parserId
     , eventLogTerminate = termVar
     }
 
@@ -72,8 +81,7 @@ initLiveProfile opts = do
 -- The function closes all sockets, stops all related threads and
 -- restores eventlog sink. 
 stopLiveProfile :: LiveProfiler -> IO ()
-stopLiveProfile LiveProfiler{..} = do
-  putMVar eventLogTerminate ()
+stopLiveProfile LiveProfiler{..} = putMVar eventLogTerminate ()
 
 -- | Tries to load data from eventlog default file and construct
 -- incremental parser. Throws if there is no eventlog file. 
@@ -95,8 +103,10 @@ ensureEvengLogFile = do
 -- some important events were emitted into the default file.
 initParserFromFile :: FilePath -> IO EventParserState
 initParserFromFile fn = do 
-  bs <- B.readFile fn 
-  return $ pushBytes newParserState bs
+  bs <- B.readFile fn
+  putStrLn fn 
+  B.putStrLn bs
+  return $ bs `seq` newParserState `pushBytes` bs
 
 foreign import ccall "enableEventLogPipe"
   enableEventLogPipe :: CSize -> IO ()
@@ -105,48 +115,56 @@ foreign import ccall "disableEventLogPipe"
   disableEventLogPipe :: IO ()
 
 foreign import ccall "getEventLogChunk"
-  getEventLogChunk :: Ptr (Ptr ()) -> Ptr CSize -> IO ()
+  getEventLogChunk :: Ptr (Ptr ()) -> IO CSize
 
--- | Create pipe on C side to transfer data from RTS to Haskell side
-withPipe :: Word64 -> IO a -> IO a 
-withPipe chunkSize m = do
+-- | Temporaly disables event log to file
+preserveEventlog :: IO a -> IO a 
+preserveEventlog m = do
   oldf <- getEventLogCFile
-  bracket createPipes (deletePipes oldf) $ const m 
+  bracket saveOld (restoreOld oldf) $ const m 
   where 
-  createPipes = withCString "w" $ \iomode -> do 
-    enableEventLogPipe (fromIntegral chunkSize)
-    setEventLogCFile nullPtr False False
-    return ()
-  deletePipes oldf _ = do
-    disableEventLogPipe
-    setEventLogCFile oldf False False
-    return ()
+  saveOld = setEventLogCFile nullPtr False False
+  restoreOld oldf _ = setEventLogCFile oldf False False
 
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust Nothing _ = pure ()
 whenJust (Just x) m = m x 
 
 getEventLogChunk' :: IO (Maybe B.ByteString)
-getEventLogChunk' = alloca $ \ptrBuf -> alloca $ \ptrSize -> do 
-  getEventLogChunk ptrBuf ptrSize
-  size <- peek ptrSize
+getEventLogChunk' = alloca $ \ptrBuf -> do 
+  size <- getEventLogChunk ptrBuf
   if size == 0 then return Nothing 
     else do
       buf <- peek ptrBuf
       Just <$> B.unsafePackMallocCStringLen (castPtr buf, fromIntegral size)
 
+-- | Do action until the mvar is not filled
+untilTerminated :: Termination -> IO a -> IO ()
+untilTerminated termVar m = do 
+  res <- tryTakeMVar termVar
+  case res of 
+    Nothing -> m >> untilTerminated termVar m
+    Just _ -> return ()
+
 -- | Creates thread that pipes eventlog from memory into incremental parser
-redirectEventlog :: LiveProfileOpts -> MVar () -> IORef EventParserState -> IO ThreadId
+redirectEventlog :: LiveProfileOpts -> Termination -> TVar EventParserState -> IO ThreadId
 redirectEventlog LiveProfileOpts{..} termVar parserRef = do 
-  forkIO . void . withPipe eventLogChunkSize . untilTerminated $ do
+  forkIO . void . preserveEventlog . untilTerminated termVar $ do
     mdatum <- getEventLogChunk'
-    whenJust mdatum $ \datum -> do
-      print $ B.take 30 datum
-      --datum `deepseq` atomicModifyIORef' parserRef $ \parser -> (pushBytes parser datum, ())
+    whenJust mdatum $ \datum -> atomically $
+      modifyTVar' parserRef $ \parser -> pushBytes parser datum
     yield
-  where 
-    untilTerminated m = do 
-      res <- tryTakeMVar termVar
-      case res of 
-        Nothing -> m 
-        Just _ -> return ()
+
+-- | Performs incremental parsing and eventlog state management
+parserThread :: LiveProfileOpts -> Termination -> TVar EventParserState -> IO ThreadId
+parserThread LiveProfileOpts{..} termVar parserRef = do 
+  forkIO . untilTerminated termVar $ do 
+    res <- atomically $ do 
+      (res, parser') <- readEvent <$> readTVar parserRef
+      writeTVar parserRef parser'
+      return $ parser' `seq` res
+    case res of 
+      Item e -> print e 
+      Incomplete -> return ()
+      Complete -> return ()
+      ParseError er -> putStrLn $ "parserThread: " ++ er
