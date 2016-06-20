@@ -21,7 +21,7 @@ import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Monoid
 import Data.Word
-import Debug.Trace (getEventLogCFile, setEventLogCFile, setEventLogHandle)
+import Debug.Trace
 import Foreign hiding (void)
 import Foreign.C
 import Foreign.Marshal.Utils (toBool)
@@ -39,7 +39,7 @@ import qualified Data.ByteString.Unsafe as B
 data LiveProfileOpts = LiveProfileOpts {
   -- | Chunk size to get from eventlog before feeding into incremental parser
   -- TODO: make the size also the size of eventlog buffers
-  eventLogChunkSize :: !Word64
+  eventLogChunkSize :: !Word
 } deriving Show 
 
 -- | Default options of live profile
@@ -65,8 +65,7 @@ data LiveProfiler = LiveProfiler {
 -- from remote tools and tracks state of eventlog protocol.
 initLiveProfile :: LiveProfileOpts -> IO LiveProfiler
 initLiveProfile opts = do
-  initialParser <- ensureEvengLogFile 
-  parserRef <- newTVarIO initialParser
+  parserRef <- newTVarIO newParserState
   termVar <- newEmptyMVar
   pipeId <- redirectEventlog opts termVar parserRef
   parserId <- parserThread opts termVar parserRef
@@ -83,60 +82,31 @@ initLiveProfile opts = do
 stopLiveProfile :: LiveProfiler -> IO ()
 stopLiveProfile LiveProfiler{..} = putMVar eventLogTerminate ()
 
--- | Tries to load data from eventlog default file and construct
--- incremental parser. Throws if there is no eventlog file. 
---
--- We need the begining as when user is able to call 'initLiveProfile'
--- some important events were emitted into the default file.
-ensureEvengLogFile :: IO EventParserState
-ensureEvengLogFile = do 
-  execPath <- getExecutablePath
-  let fileName = takeBaseName execPath <> ".eventlog"
-  eventlogPresents <- doesFileExist fileName
-  if eventlogPresents then initParserFromFile fileName
-    else fail "Cannot find eventlog file, check if program compiled with '-eventlog -rtsopts' and run it with '+RTS -l'"
-
--- | Read the begining of eventlog from file and construct
--- incremental parser. 
---
--- We need the begining as when user is able to call 'initLiveProfile'
--- some important events were emitted into the default file.
-initParserFromFile :: FilePath -> IO EventParserState
-initParserFromFile fn = do 
-  bs <- B.readFile fn
-  putStrLn fn 
-  B.putStrLn bs
-  return $ bs `seq` newParserState `pushBytes` bs
-
-foreign import ccall "enableEventLogPipe"
-  enableEventLogPipe :: CSize -> IO ()
-
-foreign import ccall "disableEventLogPipe"
-  disableEventLogPipe :: IO ()
-
-foreign import ccall "getEventLogChunk"
-  getEventLogChunk :: Ptr (Ptr ()) -> IO CSize
-
 -- | Temporaly disables event log to file
-preserveEventlog :: IO a -> IO a 
-preserveEventlog m = do
+preserveEventlog :: Word -> IO a -> IO a 
+preserveEventlog chunkSize m = do
   oldf <- getEventLogCFile
-  bracket saveOld (restoreOld oldf) $ const m 
+  odlSize <- getEventLogBufferSize
+  bracket saveOld (restoreOld oldf odlSize) $ const m 
   where 
-  saveOld = setEventLogCFile nullPtr False False
-  restoreOld oldf _ = setEventLogCFile oldf False False
+  saveOld = do
+    setEventLogCFile nullPtr False False
+    setEventLogBufferSize chunkSize
+  restoreOld oldf odlSize _ = do
+    setEventLogCFile oldf False False
+    setEventLogBufferSize odlSize
 
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust Nothing _ = pure ()
 whenJust (Just x) m = m x 
 
+-- | Same as 'getEventLogChunk' but wraps result in 'ByteString'
 getEventLogChunk' :: IO (Maybe B.ByteString)
-getEventLogChunk' = alloca $ \ptrBuf -> do 
-  size <- getEventLogChunk ptrBuf
-  if size == 0 then return Nothing 
-    else do
-      buf <- peek ptrBuf
-      Just <$> B.unsafePackMallocCStringLen (castPtr buf, fromIntegral size)
+getEventLogChunk' = do
+  mres <- getEventLogChunk
+  case mres of 
+    Nothing -> return Nothing
+    Just cbuf -> Just <$> B.unsafePackMallocCStringLen cbuf
 
 -- | Do action until the mvar is not filled
 untilTerminated :: Termination -> IO a -> IO ()
@@ -149,7 +119,7 @@ untilTerminated termVar m = do
 -- | Creates thread that pipes eventlog from memory into incremental parser
 redirectEventlog :: LiveProfileOpts -> Termination -> TVar EventParserState -> IO ThreadId
 redirectEventlog LiveProfileOpts{..} termVar parserRef = do 
-  forkIO . void . preserveEventlog . untilTerminated termVar $ do
+  forkIO . void . preserveEventlog eventLogChunkSize . untilTerminated termVar $ do
     mdatum <- getEventLogChunk'
     whenJust mdatum $ \datum -> atomically $
       modifyTVar' parserRef $ \parser -> pushBytes parser datum
