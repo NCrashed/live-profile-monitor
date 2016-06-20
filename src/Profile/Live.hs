@@ -45,7 +45,7 @@ data LiveProfileOpts = LiveProfileOpts {
 -- | Default options of live profile
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
-    eventLogChunkSize = 1024 * 1024 -- 1 Mb
+    eventLogChunkSize = 1024 --2 * 1024 * 1024 -- 2 Mb
   }
 
 -- | Termination mutex, all threads are stopped when the mvar is filled
@@ -53,10 +53,9 @@ type Termination = MVar ()
 
 -- | Live profiler state
 data LiveProfiler = LiveProfiler {
-  -- | Id of thread that pipes from memory into incremental parser
+  -- | Id of thread that pipes from memory into incremental parser and
+  -- and maintains parsed events to keep eye on state of the eventlog.
   eventLogPipeThread :: ThreadId
-  -- | Id of thread that performs incremental parsing
-, eventLogParserThread :: ThreadId 
   -- | Termination mutex, all threads are stopped when the mvar is filled
 , eventLogTerminate :: Termination
 }
@@ -65,13 +64,10 @@ data LiveProfiler = LiveProfiler {
 -- from remote tools and tracks state of eventlog protocol.
 initLiveProfile :: LiveProfileOpts -> IO LiveProfiler
 initLiveProfile opts = do
-  parserRef <- newTVarIO newParserState
   termVar <- newEmptyMVar
-  pipeId <- redirectEventlog opts termVar parserRef
-  parserId <- parserThread opts termVar parserRef
+  pipeId <- redirectEventlog opts termVar
   return LiveProfiler {
       eventLogPipeThread = pipeId
-    , eventLogParserThread = parserId
     , eventLogTerminate = termVar
     }
 
@@ -109,32 +105,27 @@ getEventLogChunk' = do
     Just cbuf -> Just <$> B.unsafePackMallocCStringLen cbuf
 
 -- | Do action until the mvar is not filled
-untilTerminated :: Termination -> IO a -> IO ()
-untilTerminated termVar m = do 
+untilTerminated :: Termination -> a -> (a -> IO a) -> IO ()
+untilTerminated termVar a m = do 
   res <- tryTakeMVar termVar
   case res of 
-    Nothing -> m >> untilTerminated termVar m
+    Nothing -> do
+      a' <- m a
+      untilTerminated termVar a' m
     Just _ -> return ()
 
 -- | Creates thread that pipes eventlog from memory into incremental parser
-redirectEventlog :: LiveProfileOpts -> Termination -> TVar EventParserState -> IO ThreadId
-redirectEventlog LiveProfileOpts{..} termVar parserRef = do 
-  forkIO . void . preserveEventlog eventLogChunkSize . untilTerminated termVar $ do
+redirectEventlog :: LiveProfileOpts -> Termination -> IO ThreadId
+redirectEventlog LiveProfileOpts{..} termVar = forkIO . void . preserveEventlog eventLogChunkSize 
+  . untilTerminated termVar newParserState $ go
+  where 
+  go parserState = do 
     mdatum <- getEventLogChunk'
-    whenJust mdatum $ \datum -> atomically $
-      modifyTVar' parserRef $ \parser -> pushBytes parser datum
-    yield
-
--- | Performs incremental parsing and eventlog state management
-parserThread :: LiveProfileOpts -> Termination -> TVar EventParserState -> IO ThreadId
-parserThread LiveProfileOpts{..} termVar parserRef = do 
-  forkIO . untilTerminated termVar $ do 
-    res <- atomically $ do 
-      (res, parser') <- readEvent <$> readTVar parserRef
-      writeTVar parserRef parser'
-      return $ parser' `seq` res
+    let parserState' = maybe parserState (pushBytes parserState) mdatum
+        (res, parserState'') = readEvent parserState'
     case res of 
       Item e -> print e 
       Incomplete -> return ()
       Complete -> return ()
       ParseError er -> putStrLn $ "parserThread: " ++ er
+    return parserState''
