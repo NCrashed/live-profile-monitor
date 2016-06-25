@@ -41,7 +41,12 @@ test-suite test-monitor
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Main.hs
+  other-modules:
+    Test.Client
   ghc-options:      -eventlog -rtsopts -threaded
   build-depends: 
       base
     , live-profile-monitor
+    , socket >= 0.6
+    , bytestring >= 0.10
+    , directory >= 1.2
