@@ -61,6 +61,8 @@ data LiveProfiler = LiveProfiler {
   -- | Id of thread that pipes from memory into incremental parser and
   -- and maintains parsed events to keep eye on state of the eventlog.
   eventLogPipeThread :: ThreadId
+  -- | When pipe thread is ended it fills the mvar
+, eventLogPipeThreadTerm :: Termination
   -- | Termination mutex, all threads are stopped when the mvar is filled
 , eventLogTerminate :: Termination
 }
@@ -70,9 +72,11 @@ data LiveProfiler = LiveProfiler {
 initLiveProfile :: LiveProfileOpts -> IO LiveProfiler
 initLiveProfile opts = do
   termVar <- newEmptyMVar
-  pipeId <- redirectEventlog opts termVar
+  pipeTerm <- newEmptyMVar
+  pipeId <- redirectEventlog opts termVar pipeTerm
   return LiveProfiler {
       eventLogPipeThread = pipeId
+    , eventLogPipeThreadTerm = pipeTerm
     , eventLogTerminate = termVar
     }
 
@@ -81,7 +85,10 @@ initLiveProfile opts = do
 -- The function closes all sockets, stops all related threads and
 -- restores eventlog sink. 
 stopLiveProfile :: LiveProfiler -> IO ()
-stopLiveProfile LiveProfiler{..} = putMVar eventLogTerminate ()
+stopLiveProfile LiveProfiler{..} = do 
+  putMVar eventLogTerminate ()
+  _ <- takeMVar eventLogPipeThreadTerm
+  return ()
 
 -- | Temporaly disables event log to file
 preserveEventlog :: Word -> IO a -> IO a 
@@ -120,9 +127,11 @@ untilTerminated termVar a m = do
     Just _ -> return ()
 
 -- | Creates thread that pipes eventlog from memory into incremental parser
-redirectEventlog :: LiveProfileOpts -> Termination -> IO ThreadId
-redirectEventlog LiveProfileOpts{..} termVar = forkIO . void . preserveEventlog eventLogChunkSize 
-  . untilTerminated termVar newParserState $ go
+redirectEventlog :: LiveProfileOpts -> Termination -> Termination -> IO ThreadId
+redirectEventlog LiveProfileOpts{..} termVar thisTerm = do
+  forkIO . void . preserveEventlog eventLogChunkSize $ do 
+    untilTerminated termVar newParserState $ go
+    putMVar thisTerm ()
   where 
   go parserState = do 
     mdatum <- getEventLogChunk'
