@@ -6,6 +6,7 @@ module Profile.Live.State(
   ) where 
 
 import Control.Concurrent
+import Data.IORef 
 
 -- | Termination mutex, all threads are stopped when the mvar is filled
 type Termination = MVar ()
@@ -19,6 +20,9 @@ data LiveProfiler = LiveProfiler {
 , eventLogPipeThreadTerm :: Termination
   -- | Termination mutex, all threads are stopped when the mvar is filled
 , eventLogTerminate :: Termination
+  -- | Holds flag of pause state, if paused, no events are sent to remote hosts,
+  -- but internal eventlog state is still maintained.
+, eventLogPause :: IORef Bool
 }
 
 -- | Do action until the mvar is not filled

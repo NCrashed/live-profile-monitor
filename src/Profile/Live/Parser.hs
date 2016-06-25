@@ -4,8 +4,9 @@ module Profile.Live.Parser(
   ) where 
 
 import Control.Concurrent
-import Control.Monad (void)
 import Control.Exception (bracket)
+import Control.Monad (void)
+import Data.IORef 
 import Debug.Trace
 import Foreign hiding (void)
 import GHC.RTS.EventsIncremental 
@@ -39,8 +40,8 @@ getEventLogChunk' = do
     Just cbuf -> Just <$> B.unsafePackMallocCStringLen cbuf
 
 -- | Creates thread that pipes eventlog from memory into incremental parser
-redirectEventlog :: LiveProfileOpts -> Termination -> Termination -> IO ThreadId
-redirectEventlog LiveProfileOpts{..} termVar thisTerm = do
+redirectEventlog :: LiveProfileOpts -> Termination -> Termination -> IORef Bool -> IO ThreadId
+redirectEventlog LiveProfileOpts{..} termVar thisTerm _ = do
   forkIO . void . preserveEventlog eventLogChunkSize $ do 
     untilTerminated termVar newParserState $ go
     putMVar thisTerm ()
