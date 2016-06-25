@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Profile.Live.Server(
     startLiveServer
   ) where 
@@ -21,18 +19,20 @@ type ServerSocket = Socket Inet6 Stream TCP
 
 -- | Starts TCP server that listens on particular port which profiling 
 -- clients connect with. 
-startLiveServer :: LiveProfileOpts -> Termination -> Termination -> IO ThreadId
-startLiveServer LiveProfileOpts{..} termVar thisTerm = do 
+startLiveServer :: LoggerSet -> LiveProfileOpts -> Termination -> Termination -> IO ThreadId
+startLiveServer logger LiveProfileOpts{..} termVar thisTerm = do 
   forkIO $ do 
+    logProf logger "Server thread started"
     withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
     putMVar thisTerm ()
+    logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
     setSocketOption s (ReuseAddress True)
     setSocketOption s (V6Only False)
     bind s (SocketAddressInet6 inet6Any eventLogListenPort 0 0)
     listen s 0 -- implentation choose queue size
-    putStrLn $ "Live profile: server started"
+    logProf logger "Server started to listen"
     m s
 
   acceptAndHandle :: ServerSocket -> IO ()
@@ -40,7 +40,7 @@ startLiveServer LiveProfileOpts{..} termVar thisTerm = do
     where 
     closeCon mres = whenJust mres $ \(p, addr) -> do 
       close p 
-      putStrLn $ "Live profile: closed connection to " ++ show addr
+      logProf logger $ "Live profile: closed connection to " <> toLogStr (show addr)
     acceptCon mres = whenJust mres $ \(p, addr) -> do 
-      putStrLn $ "Accepted connection from " ++ show addr
+      logProf logger $ "Accepted connection from " <> toLogStr (show addr)
       sendAll p "Hello world!" msgNoSignal

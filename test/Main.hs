@@ -1,18 +1,21 @@
 module Main where
 
-import Control.Exception (bracket)
-import Profile.Live
-import Debug.Trace 
-import Control.Monad 
 import Control.Concurrent
+import Control.Exception (bracket)
+import Control.Monad 
+import Debug.Trace 
+import Profile.Live
+import System.Log.FastLogger
 
 import Test.Client
 import System.Socket.Family.Inet6
 
 import System.Directory
 
-main = bracket (initLiveProfile defaultLiveProfileOpts) stopLiveProfile $ const $ do
-  flag <- doesFileExist "test.eventlog"
-  when flag $ removeFile "test.eventlog"
-  recieveRemoteEventlog (SocketAddressInet6 inet6Loopback 8242 0 0) "test.eventlog"
-  void $ replicateM 100000 $ traceEventIO "MyEvent"
+main = do
+  logger <- newStdoutLoggerSet defaultBufSize
+  bracket (initLiveProfile defaultLiveProfileOpts logger) stopLiveProfile $ const $ do
+    flag <- doesFileExist "test.eventlog"
+    when flag $ removeFile "test.eventlog"
+    recieveRemoteEventlog (SocketAddressInet6 inet6Loopback 8242 0 0) "test.eventlog"
+    void $ replicateM 100000 $ traceEventIO "MyEvent"

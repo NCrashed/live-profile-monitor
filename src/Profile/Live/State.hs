@@ -3,10 +3,18 @@ module Profile.Live.State(
   , LiveProfiler(..)
   , untilTerminated
   , whenJust
+  , logProf
+  -- * Reexports
+  , Monoid(..)
+  , (<>)
+  , LoggerSet
+  , ToLogStr(..)
   ) where 
 
 import Control.Concurrent
 import Data.IORef 
+import Data.Monoid
+import System.Log.FastLogger
 
 -- | Termination mutex, all threads are stopped when the mvar is filled
 type Termination = MVar ()
@@ -28,6 +36,8 @@ data LiveProfiler = LiveProfiler {
   -- | Holds flag of pause state, if paused, no events are sent to remote hosts,
   -- but internal eventlog state is still maintained.
 , eventLogPause :: !(IORef Bool)
+  -- | Where we log about live profiler progress and errors
+, eventLogger :: !LoggerSet
 }
 
 -- | Do action until the mvar is not filled
@@ -43,3 +53,7 @@ untilTerminated termVar a m = do
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust Nothing _ = pure ()
 whenJust (Just x) m = m x 
+
+-- | Helper to log in live profiler
+logProf :: LoggerSet -> LogStr -> IO ()
+logProf logger msg = pushLogStrLn logger $ "Live profiler: " <> msg

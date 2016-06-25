@@ -23,4 +23,6 @@ recieveRemoteEventlog addr filename = void . forkIO $ bracket socket close $
   go :: ServerSocket -> IO ()
   go s = withFile filename WriteMode $ \h -> forever $ do 
     bs <- receive s 1024 mempty
-    BS.hPut h bs 
+    when (BS.length bs > 0) $ do
+      BS.hPut h bs 
+      hFlush h 

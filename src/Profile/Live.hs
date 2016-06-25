@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE MultiWayIf #-}
 module Profile.Live(
   -- * Options
     LiveProfileOpts
@@ -14,6 +12,7 @@ module Profile.Live(
 import Control.Concurrent
 import Control.Monad.IO.Class
 import Data.IORef 
+import System.Log.FastLogger
 
 import Profile.Live.Options 
 import Profile.Live.Parser 
@@ -22,14 +21,14 @@ import Profile.Live.State
 
 -- | Initialize live profile monitor that accepts connections
 -- from remote tools and tracks state of eventlog protocol.
-initLiveProfile :: MonadIO m => LiveProfileOpts -> m LiveProfiler
-initLiveProfile opts = liftIO $ do
+initLiveProfile :: MonadIO m => LiveProfileOpts -> LoggerSet -> m LiveProfiler
+initLiveProfile opts eventLogger = liftIO $ do
   eventLogPause <- newIORef False
   eventLogTerminate <- newEmptyMVar
   eventLogPipeThreadTerm <- newEmptyMVar
-  eventLogPipeThread <- redirectEventlog opts eventLogTerminate eventLogPipeThreadTerm eventLogPause
+  eventLogPipeThread <- redirectEventlog eventLogger opts eventLogTerminate eventLogPipeThreadTerm eventLogPause
   eventLogServerThreadTerm <- newEmptyMVar
-  eventLogServerThread <- startLiveServer opts eventLogTerminate eventLogServerThreadTerm
+  eventLogServerThread <- startLiveServer eventLogger opts eventLogTerminate eventLogServerThreadTerm 
   return LiveProfiler {..}
 
 -- | Destroy live profiler.
@@ -38,13 +37,16 @@ initLiveProfile opts = liftIO $ do
 -- restores eventlog sink. 
 stopLiveProfile :: MonadIO m => LiveProfiler -> m ()
 stopLiveProfile LiveProfiler{..} = liftIO $ do 
+  logProf eventLogger "Terminating"
   putMVar eventLogTerminate ()
   _ <- takeMVar eventLogPipeThreadTerm
   _ <- takeMVar eventLogServerThreadTerm
-  return ()
+  logProf eventLogger "Terminated"
 
 -- | Pause live profiler. Temporally disables event sending to
 -- remote host, but still maintains internal state of the eventlog.
 pauseLiveProfile :: MonadIO m => LiveProfiler -> Bool -> m ()
-pauseLiveProfile LiveProfiler{..} flag = liftIO $
+pauseLiveProfile LiveProfiler{..} flag = liftIO $ do
+  if flag then logProf eventLogger "Paused"
+    else logProf eventLogger "Unpaused"
   atomicWriteIORef eventLogPause flag
