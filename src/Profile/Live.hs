@@ -31,6 +31,8 @@ import System.Environment (getExecutablePath)
 import System.FilePath (takeBaseName)
 import System.IO (IOMode(..), openFile, Handle, hClose)
 import System.Posix.Types (Fd(..))
+import System.Socket 
+import System.Socket.Family.Inet
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as B 
@@ -40,12 +42,15 @@ data LiveProfileOpts = LiveProfileOpts {
   -- | Chunk size to get from eventlog before feeding into incremental parser
   -- TODO: make the size also the size of eventlog buffers
   eventLogChunkSize :: !Word
+  -- | Port that is used to listen for incoming connections.
+, eventLogListenPort :: !InetPort
 } deriving Show 
 
 -- | Default options of live profile
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
-    eventLogChunkSize = 1024 --2 * 1024 * 1024 -- 2 Mb
+    eventLogChunkSize = 512 -- 1 Kb
+  , eventLogListenPort = 8242 
   }
 
 -- | Termination mutex, all threads are stopped when the mvar is filled
