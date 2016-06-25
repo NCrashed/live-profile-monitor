@@ -16,6 +16,10 @@ library
   hs-source-dirs:      src
   exposed-modules:
     Profile.Live
+    Profile.Live.Options 
+    Profile.Live.Parser 
+    Profile.Live.State
+  ghc-options: -Wall -Werror
   build-depends:       
       base >= 4.7 && < 5
     , ghc-events >= 0.5
