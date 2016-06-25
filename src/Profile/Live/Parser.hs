@@ -43,7 +43,7 @@ getEventLogChunk' = do
 redirectEventlog :: LiveProfileOpts -> Termination -> Termination -> IORef Bool -> IO ThreadId
 redirectEventlog LiveProfileOpts{..} termVar thisTerm _ = do
   forkIO . void . preserveEventlog eventLogChunkSize $ do 
-    untilTerminated termVar newParserState $ go
+    untilTerminated termVar newParserState go
     putMVar thisTerm ()
   where 
   go parserState = do 

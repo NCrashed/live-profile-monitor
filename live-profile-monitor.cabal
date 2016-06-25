@@ -18,6 +18,7 @@ library
     Profile.Live
     Profile.Live.Options 
     Profile.Live.Parser 
+    Profile.Live.Server
     Profile.Live.State
   ghc-options: -Wall -Werror
   build-depends:       

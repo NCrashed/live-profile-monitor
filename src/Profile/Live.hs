@@ -17,6 +17,7 @@ import Data.IORef
 
 import Profile.Live.Options 
 import Profile.Live.Parser 
+import Profile.Live.Server
 import Profile.Live.State 
 
 -- | Initialize live profile monitor that accepts connections
@@ -27,6 +28,8 @@ initLiveProfile opts = liftIO $ do
   eventLogTerminate <- newEmptyMVar
   eventLogPipeThreadTerm <- newEmptyMVar
   eventLogPipeThread <- redirectEventlog opts eventLogTerminate eventLogPipeThreadTerm eventLogPause
+  eventLogServerThreadTerm <- newEmptyMVar
+  eventLogServerThread <- startLiveServer opts eventLogTerminate eventLogServerThreadTerm
   return LiveProfiler {..}
 
 -- | Destroy live profiler.
@@ -37,6 +40,7 @@ stopLiveProfile :: MonadIO m => LiveProfiler -> m ()
 stopLiveProfile LiveProfiler{..} = liftIO $ do 
   putMVar eventLogTerminate ()
   _ <- takeMVar eventLogPipeThreadTerm
+  _ <- takeMVar eventLogServerThreadTerm
   return ()
 
 -- | Pause live profiler. Temporally disables event sending to
