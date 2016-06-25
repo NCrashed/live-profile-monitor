@@ -3,7 +3,7 @@ module Profile.Live.Options(
   , defaultLiveProfileOpts
   ) where 
 
-import System.Socket.Family.Inet
+import System.Socket.Family.Inet6
 
 -- | Options of live profile monitor
 data LiveProfileOpts = LiveProfileOpts {
@@ -11,7 +11,7 @@ data LiveProfileOpts = LiveProfileOpts {
   -- TODO: make the size also the size of eventlog buffers
   eventLogChunkSize :: !Word
   -- | Port that is used to listen for incoming connections.
-, eventLogListenPort :: !InetPort
+, eventLogListenPort :: !Inet6Port
 } deriving Show 
 
 -- | Default options of live profile
