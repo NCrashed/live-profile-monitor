@@ -4,14 +4,18 @@ module Profile.Live.Server.Message(
     ProfileMsg(..)
   , ServiceMsg(..)
   , EventMsg(..)
+  , MessageCollector
   ) where 
 
 import Control.DeepSeq
+import Data.Time 
+import Data.Word 
 import GHC.Generics
 import GHC.RTS.Events
-import Data.Word 
 
 import qualified Data.ByteString as BS 
+import qualified Data.HashMap.Strict as H
+import qualified Data.Sequence as S 
 
 -- | Most general type of messages that the monitor generates and understands
 --
@@ -32,10 +36,16 @@ data ServiceMsg =
 data EventMsg = 
     EventHeaderType {-# UNPACK #-} !EventType -- ^ Part of the eventlog header
   -- | Special case for block of events as it can contain large amount of events
-  | EventBlockMsg {
-      eblockMsgEndTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Time when the block ended
+  | EventBlockMsgHeader {
+      eblockMsgId :: {-# UNPACK #-} !Word64 -- ^ Id of the block that is unique for the session
+    , eblockMsgEndTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Time when the block ended
     , eblockMsgCap :: {-# UNPACK #-} !Word32 -- ^ Capability that emitted all the msgs in the block, 0 is global event, 1 is first cap and so on.
     , eblockMsgEventsCount :: {-# UNPACK #-} !Word64 -- ^ Count of substitute msgs that are related to the block
+    }
+  -- | Wrapper for message that is attached to particular block
+  | EventBlockMsg {
+      eblockMsgId :: {-# UNPACK #-} !Word64 -- ^ Id of the block that is unique for the session
+    , eblockMsgPayload :: !EventMsg -- ^ Message of the block
     }
   | EventMsg {-# UNPACK #-} !Event -- ^ Eventlog event, except the block markers and too large events
   -- | When event is too big to fit into the MTU, it is splited into several parts, it is the first part -- the header of such sequence.
@@ -182,3 +192,22 @@ instance NFData EventInfo where
     PerfName{..} -> perfNum `seq` name `deepseq` ()
     PerfCounter{..} -> perfNum `seq` tid `deepseq` period `seq` ()
     PerfTracepoint{..} -> perfNum `seq` tid `deepseq` ()
+
+-- | State of message decoder, helps to collect partial and blocked messages into
+-- ordinal 'Event'
+data MessageCollector = MessageCollector {
+    -- | Temporal storage for partial messages with the time tag to be able to discard 
+    -- too old messages
+    collectorPartials :: !(H.HashMap Word64 (UTCTime, S.Seq (Word64, BS.ByteString)))
+    -- | Temporal storage for block messages with the time tag to be able to discard
+    -- too old messages
+  , collectorBlocks :: !(H.HashMap Word64 (UTCTime, S.Seq (Word64, EventMsg) ))
+  } deriving (Show)
+
+-- | Initial state of message collector
+emptyMessageCollector :: MessageCollector 
+emptyMessageCollector = MessageCollector {
+    collectorPartials = H.empty 
+  , collectorBlocks = H.empty
+  }
+
