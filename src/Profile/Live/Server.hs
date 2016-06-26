@@ -31,7 +31,7 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm = do
     setSocketOption s (ReuseAddress True)
     setSocketOption s (V6Only False)
     bind s (SocketAddressInet6 inet6Any eventLogListenPort 0 0)
-    listen s 0 -- implentation choose queue size
+    listen s 0 -- implentation chooses the queue size
     logProf logger "Server started to listen"
     m s
 
