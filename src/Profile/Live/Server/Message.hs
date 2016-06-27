@@ -11,6 +11,8 @@ module Profile.Live.Server.Message(
   , MessageCollector
   , emptyMessageCollector
   , stepMessageCollector
+  , capToGhcEvents
+  , capFromGhcEvents
   ) where 
 
 import Control.DeepSeq
@@ -393,7 +395,7 @@ capToGhcEvents :: Word32 -> Int
 capToGhcEvents i = fromIntegral i - 1
 
 -- | Convert representation of cap from ghc-events one
---capFromGhcEvents :: Int -> Word32 
---capFromGhcEvents i 
---  | i < 0 = 0 
---  | otherwise = fromIntegral i + 1
+capFromGhcEvents :: Int -> Word32 
+capFromGhcEvents i 
+  | i < 0 = 0 
+  | otherwise = fromIntegral i + 1
