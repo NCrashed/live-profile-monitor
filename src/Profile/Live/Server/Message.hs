@@ -14,16 +14,15 @@ module Profile.Live.Server.Message(
 
 import Control.DeepSeq
 import Control.Monad.Trans.State.Strict
-import Data.Binary.Get
 import Data.Monoid
 import Data.Time 
 import Data.Word 
 import GHC.Generics
 import GHC.RTS.Events
+import GHC.RTS.EventsIncremental
 
 import qualified Data.Foldable as F 
 import qualified Data.ByteString as BS 
-import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as H
 import qualified Data.Sequence as S 
 
@@ -36,6 +35,7 @@ import qualified Data.Sequence as S
 -- Note: the datagram implementation should support delivery guarantees 
 data ProfileMsg = 
     ProfileService {-# UNPACK #-} !ServiceMsg -- ^ Service message
+  | ProfileHeader {-# UNPACK #-} !EventType -- ^ Header message
   | ProfileEvent !EventMsg -- ^ Payload message
   deriving (Generic, Show)
 
@@ -46,9 +46,8 @@ data ServiceMsg =
 
 -- | Type of messages that carry eventlog datum
 data EventMsg = 
-    EventHeaderType {-# UNPACK #-} !EventType -- ^ Part of the eventlog header
-  | EventBlockMsg {-# UNPACK #-} !EventBlockMsg -- ^ Chunked portion of events
-  | EventMsg {-# UNPACK #-} !EventMsgPartial -- ^ Possibly partial message
+    EventBlockMsg !EventBlockMsg -- ^ Chunked portion of events
+  | EventMsg !EventMsgPartial -- ^ Possibly partial message
   deriving (Generic, Show)
 
 -- | Special case for block of events as it can contain large amount of events
@@ -254,9 +253,10 @@ emptyMessageCollector timeout = MessageCollector {
 -- of the block are arrived. The main nuance is that header and events can 
 -- arrive in out of order, so need to handle this neatly.   
 collectorBlock :: UTCTime -- ^ Current time
+  -> EventParserState -- ^ Incremental parser with fully feeded header
   -> EventBlockMsg -- ^ Message about event block
   -> State MessageCollector (Maybe (S.Seq Event))
-collectorBlock curTime msg = case msg of 
+collectorBlock curTime parser msg = case msg of 
   EventBlockMsgHeader header@EventBlockMsgData{..} -> do 
     modify' $ \mc@MessageCollector{..} -> mc {
         collectorBlocks = case eblockMsgDataId `H.lookup` collectorBlocks of 
@@ -266,7 +266,7 @@ collectorBlock curTime msg = case msg of
     return Nothing 
   EventBlockMsgPart {..} -> do 
     mc <- get 
-    mpayload <- collectorPartial curTime eblockMsgPayload 
+    mpayload <- collectorPartial curTime parser eblockMsgPayload 
     case mpayload of 
       Nothing -> return Nothing -- Could be only a part of whole event
       Just payload -> case eblockMsgId `H.lookup` collectorBlocks mc of 
@@ -305,9 +305,10 @@ collectorBlock curTime msg = case msg of
 -- The main nuance is that header and events can arrive in 
 -- out of order, so need to handle this neatly.   
 collectorPartial :: UTCTime -- ^ Current time
+  -> EventParserState -- ^ Incremental parser with fully feeded header
   -> EventMsgPartial -- ^ Message about event block
   -> State MessageCollector (Maybe Event)
-collectorPartial curTime msg = case msg of 
+collectorPartial curTime parser msg = case msg of 
   EventMsgFull ev -> return $ Just ev 
   EventMsgPartial header@EventPartialData{..} -> do 
     mc@MessageCollector{..} <- get
@@ -334,8 +335,10 @@ collectorPartial curTime msg = case msg of
         return Nothing
       Just (t, Just header, es) -> if fromIntegral (S.length es) >= epartialMsgParts header
         then case parsed of 
-          Nothing -> return Nothing -- something went wrong. TODO: log the staff 
-          Just ev -> do
+          Incomplete -> return Nothing -- something went wrong. TODO: log the staff 
+          Complete -> return Nothing -- something went wrong. TODO: log the staff 
+          ParseError _ -> return Nothing  -- something went wrong. TODO: log the staff 
+          Item ev -> do
             put mc {
               collectorPartials = H.delete epartMsgId collectorPartials
               }
@@ -348,29 +351,26 @@ collectorPartial curTime msg = case msg of
           return Nothing
         where
           es' = (epartMsgNum, epartMsgPayload) `orderedInsert` es 
-          payload = F.foldl' (\acc s -> acc <> BSL.fromStrict s) BSL.empty $ snd `fmap` es'
-          parsed = runGet (getEvent standardParsers) payload
+          payload = F.foldl' (\acc s -> acc <> s) BS.empty $ snd `fmap` es'
+          (parsed, _) = readEvent $ pushBytes parser payload -- We drop new parser state as we always 
+            -- feed enough data to get new event. TODO: check if parser can be used as state of the collector
 
 -- | Perform one step of converting the profiler protocol into events
 stepMessageCollector :: UTCTime -- ^ Current time
+  -> EventParserState -- ^ Incremental parser with fully feeded header
   -> EventMsg -- ^ New message arrived
   -> MessageCollector -- ^ Current state of collector
-  -> (Maybe (Either EventType (S.Seq Event)), MessageCollector) -- ^ Result of decoded event and next state of the collector
-stepMessageCollector curTime msg collector = me `deepseq` collector `deepseq` (me, collector')
+  -> (Maybe (S.Seq Event), MessageCollector) -- ^ Result of decoded event and next state of the collector
+stepMessageCollector curTime parser msg collector = me `deepseq` collector' `deepseq` (me, collector')
   where 
     (me, collector') = runState step collector
-    step = case msg of 
-      EventHeaderType t -> return . Just . Left $ t 
-      EventBlockMsg bmsg -> do 
-        res <- collectorBlock curTime bmsg 
-        return $ case res of 
-          Nothing -> Nothing 
-          Just es -> Just . Right $ es 
+    step = case msg of
+      EventBlockMsg bmsg -> collectorBlock curTime parser bmsg 
       EventMsg pmsg -> do 
-        res <- collectorPartial curTime pmsg 
+        res <- collectorPartial curTime parser pmsg 
         return $ case res of 
           Nothing -> Nothing 
-          Just e -> Just . Right $ S.singleton e 
+          Just e -> Just $ S.singleton e 
 
 -- | Inserts the pair into sequence with preserving ascending order
 orderedInsert :: Ord a => (a, b) -> S.Seq (a, b) -> S.Seq (a, b)
@@ -386,7 +386,7 @@ capToGhcEvents :: Word32 -> Int
 capToGhcEvents i = fromIntegral i - 1
 
 -- | Convert representation of cap from ghc-events one
-capFromGhcEvents :: Int -> Word32 
-capFromGhcEvents i 
-  | i < 0 = 0 
-  | otherwise = fromIntegral i + 1
+--capFromGhcEvents :: Int -> Word32 
+--capFromGhcEvents i 
+--  | i < 0 = 0 
+--  | otherwise = fromIntegral i + 1
