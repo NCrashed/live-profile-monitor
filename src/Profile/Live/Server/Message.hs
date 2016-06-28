@@ -16,8 +16,10 @@ module Profile.Live.Server.Message(
   ) where 
 
 import Control.DeepSeq
+import Control.Monad 
 import Control.Monad.State.Class
 import Control.Monad.Writer.Class
+import Data.Maybe
 import Data.Monoid
 import Data.Time 
 import Data.Word 
@@ -26,8 +28,8 @@ import GHC.RTS.Events
 import GHC.RTS.EventsIncremental
 import System.Log.FastLogger
 
-import qualified Data.Foldable as F 
 import qualified Data.ByteString as BS 
+import qualified Data.Foldable as F 
 import qualified Data.HashMap.Strict as H
 import qualified Data.Sequence as S 
 
@@ -40,13 +42,19 @@ import qualified Data.Sequence as S
 -- Note: the datagram implementation should support delivery guarantees 
 data ProfileMsg = 
     ProfileService {-# UNPACK #-} !ServiceMsg -- ^ Service message
-  | ProfileHeader {-# UNPACK #-} !EventType -- ^ Header message
+  | ProfileHeader !HeaderMsg -- ^ Header message
   | ProfileEvent !EventMsg -- ^ Payload message
   deriving (Generic, Show)
 
 -- | Type of messages that controls the monitor behavior
 data ServiceMsg =
     ServicePause !Bool -- ^ Command to pause the monitor (client to server)
+  deriving (Generic, Show)
+
+-- | Messages about eventlog header
+data HeaderMsg = 
+    HeaderLength {-# UNPACK #-} !Word64
+  | HeaderType {-# UNPACK #-} !BS.ByteString
   deriving (Generic, Show)
 
 -- | Type of messages that carry eventlog datum
@@ -95,6 +103,7 @@ data EventPartialData = EventPartialData {
 
 instance NFData EventMsg
 instance NFData ServiceMsg
+instance NFData HeaderMsg
 instance NFData ProfileMsg
 instance NFData EventBlockMsg
 instance NFData EventBlockMsgData
@@ -242,9 +251,18 @@ data MessageCollector = MessageCollector {
     -- if we don't drop old invalid cache one could attack the monitor with
     -- invalid messages sequence and cause memory leak.
   , collectorTimeout :: !NominalDiffTime
-  } deriving (Show, Generic)
+    -- | Holds intermediate state of header that is collected in the first phase of the protocol.
+    -- The first word holds info about how many event types we await, the second how many we have 
+    -- received.
+  , collectorHeader :: !(Maybe Word64, Word64, EventParserState)
+  }
 
-instance NFData MessageCollector
+instance NFData MessageCollector where 
+  rnf MessageCollector{..} = 
+    collectorPartials `deepseq` 
+    collectorBlocks `deepseq`
+    collectorTimeout `deepseq`
+    (let (a, b, c) = collectorHeader in a `deepseq` b `seq` c `seq` ()) `seq` ()
 
 -- | Initial state of message collector
 emptyMessageCollector :: NominalDiffTime -> MessageCollector 
@@ -252,16 +270,65 @@ emptyMessageCollector timeout = MessageCollector {
     collectorPartials = H.empty 
   , collectorBlocks = H.empty
   , collectorTimeout = timeout
+  , collectorHeader = (Nothing, 0, newParserState `pushBytes` ("hdrb" <> "hetb")) -- TODO: use constant from ghc-events
   }
-
 
 -- | Perform one step of converting the profiler protocol into events
 stepMessageCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
   => UTCTime -- ^ Current time
+  -> ProfileMsg -- ^ New message arrived
+  -> m (Either ServiceMsg (S.Seq Event)) -- ^ Result of decoded events
+stepMessageCollector curTime  msg = do
+  (maxN, curN, parser) <- gets collectorHeader
+  let isPhase1 = isNothing maxN || fromMaybe 0 maxN > curN 
+  case msg of
+    ProfileService smsg -> return $ Left smsg 
+    ProfileHeader hmsg | isPhase1 -> stepHeaderCollector hmsg >> return (Right S.empty)
+    ProfileHeader hmsg | otherwise -> do 
+      tell "Live profiler: Got header message in second phase.\n"
+      stepHeaderCollector hmsg
+      return (Right S.empty)
+    ProfileEvent emsg -> do
+      when isPhase1 $ tell "Live profiler: Got event message in first phase.\n"
+      mseq <- stepEventCollector curTime parser emsg
+      return $ Right $ fromMaybe mempty mseq
+
+-- | First phase of the collector when we collect header
+stepHeaderCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
+  => HeaderMsg -- ^ New message arrived 
+  -> m () -- ^ Returns incremental parser ready for events consuming
+stepHeaderCollector hmsg = do
+  (maxN, curN, parser) <- gets collectorHeader
+  case hmsg of 
+    HeaderLength n -> do
+      when (isJust maxN) . tell $ "Live profiler: Received repeated header initiation message. It's not normal.\n"
+      let maxN' = Just n
+      modify' $ \mc -> maxN' `seq` mc { collectorHeader = (maxN', curN, parser) }
+    HeaderType bs -> do
+      case maxN of 
+        Just n | n <= curN -> do 
+          tell $ "Live profiler: Received excess event type (" 
+            <> toLogStr (show $ curN+1) <> "). It's not normal. Event type:" 
+            <> toLogStr (show bs) <> "\n"
+        Just n | otherwise -> do 
+          let parser' = parser `pushBytes` bs -- TODO: use putEventType from GHC.RTS.Events
+              parser'' = if n == curN'
+                then parser' `pushBytes` ("hete" <> "hdre" <> "datb")  -- TODO: use constants from ghc-events
+                else parser'
+              curN' = curN + 1
+          modify' $ \mc -> parser'' `seq` curN' `seq` mc { collectorHeader = (maxN, curN', parser'') }
+        Nothing -> do
+          let parser' = parser `pushBytes` bs -- TODO: use putEventType from GHC.RTS.Events
+              curN' = curN + 1
+          modify' $ \mc -> parser' `seq` curN' `seq` mc { collectorHeader = (maxN, curN', parser') }
+
+-- | Perform one step of converting the profiler protocol into events
+stepEventCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
+  => UTCTime -- ^ Current time
   -> EventParserState -- ^ Incremental parser with fully feeded header
   -> EventMsg -- ^ New message arrived
   -> m (Maybe (S.Seq Event)) -- ^ Result of decoded event if any
-stepMessageCollector curTime parser msg = case msg of
+stepEventCollector curTime parser msg = case msg of
   EventBlockMsg bmsg -> collectorBlock bmsg 
   EventMsg pmsg -> do 
     res <- collectorPartial pmsg 
@@ -354,13 +421,13 @@ stepMessageCollector curTime parser msg = case msg of
         Just (t, Just header, es) -> if fromIntegral (S.length es) >= epartialMsgParts header
           then case parsed of 
             Incomplete -> do
-              tell $ "Received incomplete message: " <> toLogStr (show payload) <> ", please report a bug.\n"
+              tell $ "Live profiler: Received incomplete message: " <> toLogStr (show payload) <> ", please report a bug.\n"
               return Nothing -- something went wrong.
             Complete -> do
-              tell $ "Received event, but the incremental parser is finished, please report a bug.\n"
+              tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
               return Nothing -- something went wrong.
             ParseError s -> do
-              tell $ "Received incorrect event's payload: " <> toLogStr (show payload) 
+              tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
                 <> ". Error: " <> toLogStr s <> "\n"
               return Nothing  -- something went wrong. 
             Item ev -> do
