@@ -18,6 +18,8 @@ cd bar
 git submodule update --init --recursive
 ```
 
+## Cabal >= 1.24
+
 * Initalize cabal environment (note, you need `Cabal` and `cabal-install` not lower than `1.24.0.0` version):
 ```
 cabal new-configure --enable-tests
@@ -31,4 +33,16 @@ cabal new-build
 * Test:
 ```
 ./tests.sh
+```
+
+## Stack
+
+* Tell stack to use system wide GHC:
+```
+stack --compiler=ghc-8.1 install
+```
+
+* Test:
+```
+stack test live-profile-monitor --compiler=ghc-8.1 --test-arguments="+RTS -lm -N4"
 ```
