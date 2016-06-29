@@ -16,6 +16,7 @@ module Profile.Live.Server.Message(
   ) where 
  
 import Control.DeepSeq
+import Data.Binary.Serialise.CBOR 
 import Data.Word 
 import GHC.Generics
 import GHC.RTS.Events
@@ -74,7 +75,7 @@ data EventBlockMsgData = EventBlockMsgData {
 
 -- | Subtype of payload messages that can be splitted into several parts
 data EventMsgPartial = 
-    EventMsgFull {-# UNPACK #-} !Event -- ^ Eventlog event, except the block markers and too large events
+    EventMsgFull {-# UNPACK #-} !BS.ByteString -- ^ Eventlog event, except the block markers and too large events
   -- | When event is too big to fit into the MTU, it is splited into several parts, it is the first part -- the header of such sequence.
   | EventMsgPartial {-# UNPACK #-} !EventPartialData 
   | EventMsgPart {
@@ -236,3 +237,12 @@ capFromGhcEvents :: Int -> Word32
 capFromGhcEvents i 
   | i < 0 = 0 
   | otherwise = fromIntegral i + 1
+
+instance Serialise ProfileMsg
+instance Serialise ServiceMsg
+instance Serialise HeaderMsg
+instance Serialise EventMsg
+instance Serialise EventBlockMsg
+instance Serialise EventMsgPartial
+instance Serialise EventBlockMsgData
+instance Serialise EventPartialData

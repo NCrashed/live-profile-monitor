@@ -180,7 +180,7 @@ stepEventCollector curTime parser msg = case msg of
     => EventMsgPartial -- ^ Message about event block
     -> m (Maybe Event)
   collectorPartial pmsg = case pmsg of 
-    EventMsgFull ev -> return $ Just ev 
+    EventMsgFull payload -> withParsed payload $ return . Just 
     EventMsgPartial header@EventPartialData{..} -> do 
       mc@MessageCollector{..} <- get
       put mc {
@@ -205,22 +205,11 @@ stepEventCollector curTime parser msg = case msg of
             }
           return Nothing
         Just (t, Just header, es) -> if fromIntegral (S.length es) >= epartialMsgParts header
-          then case parsed of 
-            Incomplete -> do
-              tell $ "Live profiler: Received incomplete message: " <> toLogStr (show payload) <> ", please report a bug.\n"
-              return Nothing -- something went wrong.
-            Complete -> do
-              tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
-              return Nothing -- something went wrong.
-            ParseError s -> do
-              tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
-                <> ". Error: " <> toLogStr s <> "\n"
-              return Nothing  -- something went wrong. 
-            Item ev -> do
-              put mc {
-                collectorPartials = H.delete epartMsgId collectorPartials
-                }
-              return $ Just ev
+          then withParsed payload $ \ev -> do
+            put mc {
+              collectorPartials = H.delete epartMsgId collectorPartials
+              }
+            return $ Just ev
           else do 
             put mc {
                 collectorPartials = H.insert epartMsgId 
@@ -230,9 +219,23 @@ stepEventCollector curTime parser msg = case msg of
           where
             es' = (epartMsgNum, epartMsgPayload) `orderedInsert` es 
             payload = F.foldl' (\acc s -> acc <> s) BS.empty $ snd `fmap` es'
-            (parsed, _) = readEvent $ pushBytes parser payload -- We drop new parser state as we always 
-              -- feed enough data to get new event. Pure parser state cannot be stored as collector state
-              -- as the bits could arrive in out of order.
+            (parsed, _) = readEvent $ pushBytes parser payload 
+    where 
+      -- We drop new parser state as we always 
+      -- feed enough data to get new event. Pure parser state cannot be stored as collector state
+      -- as the bits could arrive in out of order.
+      withParsed payload m = case fst . readEvent $ pushBytes parser payload of 
+        Incomplete -> do
+          tell $ "Live profiler: Received incomplete message: " <> toLogStr (show payload) <> ", please report a bug.\n"
+          return Nothing -- something went wrong.
+        Complete -> do
+          tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
+          return Nothing -- something went wrong.
+        ParseError s -> do
+          tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
+            <> ". Error: " <> toLogStr s <> "\n"
+          return Nothing  -- something went wrong. 
+        Item ev -> m ev 
 
 -- | Inserts the pair into sequence with preserving ascending order
 orderedInsert :: Ord a => (a, b) -> S.Seq (a, b) -> S.Seq (a, b)
