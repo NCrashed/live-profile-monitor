@@ -18,19 +18,17 @@ cd bar
 git submodule update --init --recursive
 ```
 
-* Initalize cabal sandbox (note, you need `Cabal` and `cabal-install` not lower than `1.24.0.0` version):
+* Initalize cabal environment (note, you need `Cabal` and `cabal-install` not lower than `1.24.0.0` version):
 ```
-cabal sandbox init
-cabal sandbox add-source ghc-events
+cabal new-configure --enable-tests
 ```
 
 * Compile:
 ```
-cabal install --dependencies-only
-cabal build
+cabal new-build
 ```
 
 * Test:
 ```
-cabal test --test-options="+RTS -lm"
+./tests.sh
 ```
