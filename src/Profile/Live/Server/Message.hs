@@ -466,3 +466,4 @@ capFromGhcEvents :: Int -> Word32
 capFromGhcEvents i 
   | i < 0 = 0 
   | otherwise = fromIntegral i + 1
+
