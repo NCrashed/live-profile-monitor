@@ -228,6 +228,15 @@ instance NFData EventInfo where
     PerfCounter{..} -> perfNum `seq` tid `deepseq` period `seq` ()
     PerfTracepoint{..} -> perfNum `seq` tid `deepseq` ()
 
+instance Serialise ProfileMsg
+instance Serialise ServiceMsg
+instance Serialise HeaderMsg
+instance Serialise EventMsg
+instance Serialise EventBlockMsg
+instance Serialise EventMsgPartial
+instance Serialise EventBlockMsgData
+instance Serialise EventPartialData
+
 -- | Convert representation of cap to ghc-events one
 capToGhcEvents :: Word32 -> Int 
 capToGhcEvents i = fromIntegral i - 1
@@ -238,11 +247,17 @@ capFromGhcEvents i
   | i < 0 = 0 
   | otherwise = fromIntegral i + 1
 
-instance Serialise ProfileMsg
-instance Serialise ServiceMsg
-instance Serialise HeaderMsg
-instance Serialise EventMsg
-instance Serialise EventBlockMsg
-instance Serialise EventMsgPartial
-instance Serialise EventBlockMsgData
-instance Serialise EventPartialData
+-- | Convert a GHC event into sequence of datagrams
+--eventToMsg :: Word64 -> Word -> Event -> S.Seq EventMsg
+--eventToMsg counter maxSize ev = case ev of
+--  EventBlock{..} -> S.singleton . EventBlockMsg $ 
+--  _ -> msgs 
+--  where 
+--    payload = runPut (putEvent ev)
+--    payloads = accumUnless BS.null (BS.splitAt maxSize payload)
+--
+--    accumUnless :: (a -> Bool) -> (a -> (b, a)) -> a -> S.Seq b 
+--    accumUnless cond f = go S.empty
+--      where 
+--      go !acc !a = if cond a then acc 
+--        else let (!b, a') = f a in go (acc S.|> b) a'

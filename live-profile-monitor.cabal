@@ -21,6 +21,7 @@ library
     Profile.Live.Server
     Profile.Live.Server.Message
     Profile.Live.Server.Collector
+    Profile.Live.Server.Splitter
     Profile.Live.State
   build-depends:       
       base >= 4.7 && < 5
