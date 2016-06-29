@@ -14,7 +14,7 @@ module Profile.Live.Server.Message(
   , capToGhcEvents
   , capFromGhcEvents
   ) where 
-
+ 
 import Control.DeepSeq
 import Data.Word 
 import GHC.Generics
@@ -236,4 +236,3 @@ capFromGhcEvents :: Int -> Word32
 capFromGhcEvents i 
   | i < 0 = 0 
   | otherwise = fromIntegral i + 1
-

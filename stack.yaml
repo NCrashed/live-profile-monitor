@@ -37,6 +37,7 @@ resolver: nightly-2016-06-29
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - ghc-events/
+- binary-serialise-cbor/
 - '.'
 
 # Dependency packages to be pulled from upstream that are not in the resolver
@@ -46,7 +47,9 @@ extra-deps:
 - binary-0.7.6.1
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+flags:
+  binary-serialise-cbor:
+    newtime15: true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

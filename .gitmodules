@@ -2,3 +2,6 @@
 	path = ghc-events
 	url = https://github.com/kvelicka/ghc-events.git
 	branch = incremental
+[submodule "binary-serialise-cbor"]
+	path = binary-serialise-cbor
+	url = https://github.com/well-typed/binary-serialise-cbor

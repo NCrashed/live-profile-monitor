@@ -1,2 +1,6 @@
 packages: 
   ghc-events/
+  binary-serialise-cbor/
+
+package binary-serialize-cbor 
+  flags: -newtime15
