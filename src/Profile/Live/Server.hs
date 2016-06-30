@@ -4,6 +4,8 @@ module Profile.Live.Server(
 
 import Control.Concurrent
 import Control.Exception 
+import Control.Monad 
+import Data.Time.Clock
 
 import Profile.Live.Options 
 import Profile.Live.State 
@@ -13,6 +15,8 @@ import System.Socket.Family.Inet6
 import System.Socket.Protocol.TCP
 import System.Socket.Type.Stream
 import System.Timeout
+
+import Profile.Live.Server.Collector
 
 -- | Socket type that is used for the server
 type ServerSocket = Socket Inet6 Stream TCP
@@ -43,4 +47,15 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm = do
       logProf logger $ "Live profile: closed connection to " <> toLogStr (show addr)
     acceptCon mres = whenJust mres $ \(p, addr) -> do 
       logProf logger $ "Accepted connection from " <> toLogStr (show addr)
-      sendAll p "Hello world!" msgNoSignal
+      listenThread p 
+      senderThread p
+      return ()
+
+    listenThread p = forkIO $ go (emptyMessageCollector eventLogMessageTimeout)
+      where 
+      go collector = forever yield -- do 
+        -- get message
+        -- get current time
+        -- stepMessageCollector curTime msg 
+        -- recursion
+    senderThread p = forkIO $ forever yield
