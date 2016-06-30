@@ -46,6 +46,7 @@ library
     RecordWildCards
     ScopedTypeVariables
     OverloadedStrings
+    BangPatterns
 
 source-repository head
   type:     git
