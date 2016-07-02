@@ -12,6 +12,7 @@ module Profile.Live.State(
   , Monoid(..)
   , (<>)
   , LoggerSet
+  , LogStr
   , ToLogStr(..)
   ) where 
 

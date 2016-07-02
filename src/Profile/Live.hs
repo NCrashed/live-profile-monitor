@@ -26,13 +26,13 @@ initLiveProfile :: MonadIO m => LiveProfileOpts -> LoggerSet -> m LiveProfiler
 initLiveProfile opts eventLogger = liftIO $ do
   eventLogPause <- newIORef False
   eventLogTerminate <- newEmptyMVar
-  eventLogPipeThreadTerm <- newEmptyMVar
-  eventLogPipeThread <- redirectEventlog eventLogger opts eventLogTerminate eventLogPipeThreadTerm eventLogPause
-  eventLogServerThreadTerm <- newEmptyMVar
-  eventLogServerThread <- startLiveServer eventLogger opts eventLogTerminate eventLogServerThreadTerm 
   let maxSize = maybe maxBound fromIntegral $ eventChannelMaximumSize opts
   eventTypeChan <- newTBMChanIO maxSize
   eventChan <- newTBMChanIO maxSize
+  eventLogPipeThreadTerm <- newEmptyMVar
+  eventLogPipeThread <- redirectEventlog eventLogger opts eventLogTerminate eventLogPipeThreadTerm eventTypeChan eventChan
+  eventLogServerThreadTerm <- newEmptyMVar
+  eventLogServerThread <- startLiveServer eventLogger opts eventLogTerminate eventLogServerThreadTerm eventLogPause eventTypeChan eventChan
   return LiveProfiler {..}
 
 -- | Destroy live profiler.

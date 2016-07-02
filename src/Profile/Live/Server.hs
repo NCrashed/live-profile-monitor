@@ -9,6 +9,7 @@ import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict (runWriter)
 import Data.Binary.Serialise.CBOR 
+import Data.IORef 
 import Data.Storable.Endian
 import Data.Time.Clock
 import Data.Word 
@@ -33,8 +34,15 @@ type ServerSocket = Socket Inet6 Stream TCP
 
 -- | Starts TCP server that listens on particular port which profiling 
 -- clients connect with. 
-startLiveServer :: LoggerSet -> LiveProfileOpts -> Termination -> Termination -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} termVar thisTerm = do 
+startLiveServer :: LoggerSet -- ^ Monitor logger
+  -> LiveProfileOpts -- ^ Options of the monitor
+  -> Termination  -- ^ When set we need to terminate self
+  -> Termination  -- ^ When terminates we need to set this  
+  -> IORef Bool -- ^ Holds flag whether the monitor is paused
+  -> EventTypeChan -- ^ Channel for event types, closed as soon as first event occured
+  -> EventChan -- ^ Channel for events
+  -> IO ThreadId
+startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ _ _ = do 
   forkIO $ do 
     logProf logger "Server thread started"
     withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
