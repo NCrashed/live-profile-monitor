@@ -69,7 +69,7 @@ redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan event
       Item e -> do 
         mhmsg <- atomically $ do 
           closed <- isClosedTBMChan eventTypeChan
-          if closed then do
+          if not closed then do
               msgs <- putHeader parserState'' 
               closeTBMChan eventTypeChan
               return msgs

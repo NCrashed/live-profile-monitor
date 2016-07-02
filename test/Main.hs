@@ -19,3 +19,4 @@ main = do
     when flag $ removeFile "test.eventlog"
     recieveRemoteEventlog (SocketAddressInet6 inet6Loopback 8242 0 0) "test.eventlog"
     void $ replicateM 100000 $ traceEventIO "MyEvent"
+    threadDelay 10000000

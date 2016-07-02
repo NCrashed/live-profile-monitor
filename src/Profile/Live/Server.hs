@@ -65,18 +65,21 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
     m s
 
   acceptAndHandle :: ServerSocket -> IO ()
-  acceptAndHandle s = bracket (timeout 1000000 $ accept s) closeCon acceptCon
+  acceptAndHandle s = do  
+    mres <- timeout 1000000 $ accept s
+    whenJust mres $ uncurry acceptCon
     where 
-    closeCon mres = whenJust mres $ \(p, addr) -> do 
+    closeOnExit p addr = bracket (return p) (\p -> closeCon p addr) . const 
+    closeCon p addr = do 
       close p 
       logProf logger $ "Live profile: closed connection to " <> toLogStr (show addr)
-    acceptCon mres = whenJust mres $ \(p, addr) -> do 
+    acceptCon p addr = do 
       logProf logger $ "Accepted connection from " <> toLogStr (show addr)
-      listenThread p 
-      senderThread p
+      listenThread p addr
+      senderThread p addr
       return ()
 
-    listenThread p = forkIO $ go (emptyMessageCollector eventLogMessageTimeout)
+    listenThread p addr = forkIO $ closeOnExit p addr $ go (emptyMessageCollector eventLogMessageTimeout)
       where 
       go collector = do 
         mmsg <- recieveMessage p
@@ -95,10 +98,11 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
                 forM_ evts $ \evt -> logProf logger $ "Got event: " <> toLogStr (show evt)
             collector' `deepseq` go collector'
 
-    senderThread p = forkIO $ goHeader S.empty
+    senderThread p addr = forkIO $ closeOnExit p addr $ goHeader S.empty
       where 
       goHeader ets = do 
         met <- atomically $ readTBMChan eventTypeChan
+        logProf logger $ "Readed from channel: " <> toLogStr (show met)
         case met of 
           -- header is complete
           Nothing -> do
@@ -122,9 +126,10 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
         Right msg -> return msg 
 
     sendMessage p msg = do 
+      logProf logger $ "Sending message " <> toLogStr (show msg)
       let msgbytes = serialise msg 
       let lbytes = fromIntegral (BS.length msgbytes) :: Word32
       allocaArray 4 $ \(ptr :: Ptr CUChar) -> do 
         pokeBE (castPtr ptr) lbytes
-        lbs <- BS.fromStrict <$> BS.unsafePackCStringLen (castPtr ptr, 4) 
+        lbs <- BS.fromStrict <$> BS.unsafePackCStringLen (castPtr ptr, 4)
         void $ send p (BS.toStrict $ lbs <> msgbytes) mempty
