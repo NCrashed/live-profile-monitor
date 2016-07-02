@@ -1,64 +1,41 @@
 module Test.Client(
-    recieveRemoteEventlog
+    receiveRemoteEventlog
   ) where
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TBMChan
-import Control.Exception
 import Control.Monad 
-import Data.IORef 
-import System.IO 
 import System.Log.FastLogger
 import GHC.RTS.Events 
+import System.IO
 
 import Profile.Live.Options 
-import Profile.Live.Parser 
 import Profile.Live.Server
 import Profile.Live.State 
 
-import System.Socket
-import System.Socket.Family.Inet6
-import System.Socket.Type.Stream
-import System.Socket.Protocol.TCP
-import System.IO
+receiveRemoteEventlog :: FilePath -> IO ()
+receiveRemoteEventlog filename = void . forkIO $ do 
+  logger <- newStdoutLoggerSet defaultBufSize
+  term <- newEmptyMVar
+  serverTerm <- newEmptyMVar
 
-import qualified Data.ByteString as BS 
+  fileChan <- newTChanIO 
+  let opts = defaultLiveProfileClientOpts
+      behavior = defaultClientBehavior {
+          clientOnHeader = atomically . writeTChan fileChan . Left
+        , clientOnEvent = atomically . writeTChan fileChan . Right
+        }
 
-type ServerSocket = Socket Inet6 Stream TCP 
+  _ <- startLiveClient logger opts term serverTerm behavior
+  writeLogFile serverTerm fileChan
+  where
 
-recieveRemoteEventlog :: SocketAddress Inet6 -> FilePath -> IO ()
-recieveRemoteEventlog addr filename = void . forkIO $ bracket socket close $ 
-  \s -> connect s addr >> go s 
-  where 
-  go :: ServerSocket -> IO ()
-  go s = do 
-    logger <- newStdoutLoggerSet defaultBufSize
-    term <- newEmptyMVar
-    serverTerm <- newEmptyMVar
-    pauseRef <- newIORef False
-    eventTypeChan <- newTBMChanIO 0
-    eventChan <- newTBMChanIO 0
-
-    fileChan <- newTChanIO 
-    let headerCallback = atomically . writeTChan fileChan . Left
-        eventCallback = atomically . writeTChan fileChan . Right
-
-    let opts = defaultLiveProfileOpts {
-            eventLogListenPort = 8243
-          }
-
-    _ <- startLiveServer logger defaultLiveProfileOpts term serverTerm
-      pauseRef eventTypeChan eventChan
-    
-    writeLogFile fileChan
-
-  writeLogFile :: TChan (Either Header Event) -> IO ()
-  writeLogFile chan = withFile filename WriteMode $ \h -> forever $ do 
+  writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
+  writeLogFile term chan = withFile filename WriteMode $ \h -> untilTerminated term () $ const $ do 
     mres <- atomically $ readTChan chan
     case mres of 
-      Left header -> do 
-        hPutStr h $ show header
+      Left hdr -> do 
+        hPutStr h $ show hdr
       Right e -> do 
         hPutStr h $ show e
     hFlush h 
