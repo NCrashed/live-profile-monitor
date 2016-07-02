@@ -1,7 +1,17 @@
 module Profile.Live(
   -- * Options
+  -- ** Server side
     LiveProfileOpts
   , defaultLiveProfileOpts
+  , eventLogChunkSize
+  , eventLogListenPort
+  , eventChannelMaximumSize
+  , eventMessageMaxSize
+  -- ** Client side
+  , LiveProfileClientOpts
+  , defaultLiveProfileClientOpts
+  , clientTargetAddr
+  , clientMessageTimeout
   -- * Basic API
   , LiveProfiler
   , initLiveProfile

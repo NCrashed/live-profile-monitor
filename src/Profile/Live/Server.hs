@@ -1,5 +1,6 @@
 module Profile.Live.Server(
     startLiveServer
+  , startLiveClient
   ) where 
 
 import Control.Concurrent
@@ -50,12 +51,11 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
   -> EventChan -- ^ Channel for events (input)
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan = do 
-  forkIO $ do 
-    logProf logger "Server thread started"
-    withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
-    putMVar thisTerm ()
-    logProf logger "Server thread terminated"
+startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan = forkIO $ do 
+  logProf logger "Server thread started"
+  withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
+  putMVar thisTerm ()
+  logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
     setSocketOption s (ReuseAddress True)
@@ -81,9 +81,32 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
       return ()
 
     listenThread p addr = forkIO $ closeOnExit p addr $ 
-      runEventListener logger p eventLogMessageTimeout
+      forever yield -- TODO: add service messages listener
     senderThread p addr = forkIO $ closeOnExit p addr $ 
       runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
+
+-- | Connect to remote app and recieve eventlog from it.
+startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
+  -> LiveProfileClientOpts -- ^ Options for client side
+  -> Termination  -- ^ When set we need to terminate self
+  -> Termination  -- ^ When terminates we need to set this  
+  -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
+startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm = forkIO $ do 
+  bracket socket clientClose $ \s -> connect s clientTargetAddr >> clientBody s
+  logProf logger "Client thread terminated"
+  where
+  clientClose s = do 
+    logProf logger "Client disconnected"
+    close s 
+  clientBody s = do 
+    logProf logger $ "Client thread started and connected to " <> showl clientTargetAddr
+    _ <- listenThread s
+    _ <- senderThread s
+    untilTerminated termVar () $ const yield
+    putMVar thisTerm ()
+
+  listenThread s = forkIO $ runEventListener logger s clientMessageTimeout
+  senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
 runEventListener :: LoggerSet -- ^ Where to spam about everthing
@@ -129,8 +152,7 @@ runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
     met <- atomically $ readTBMChan eventTypeChan
     logProf logger $ "Read header from channel: " <> showl met
     case met of 
-      -- header is complete
-      Nothing -> do
+      Nothing -> do -- header is complete
         mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
         goMain $ emptySplitterState maxSize
       Just et -> do 

@@ -1,6 +1,10 @@
 module Profile.Live.Options(
+  -- * Server side
     LiveProfileOpts(..)
   , defaultLiveProfileOpts
+  -- * Client side
+  , LiveProfileClientOpts(..)
+  , defaultLiveProfileClientOpts
   ) where 
 
 import System.Socket.Family.Inet6
@@ -13,8 +17,6 @@ data LiveProfileOpts = LiveProfileOpts {
   eventLogChunkSize :: !Word
   -- | Port that is used to listen for incoming connections.
 , eventLogListenPort :: !Inet6Port
-  -- | How long to wait until the server drops outdated sequences of partial messages and blocks.
-, eventLogMessageTimeout :: !NominalDiffTime
   -- | How many items in internal channels we hold. If there are additional items, the system
   -- will drop the new items to prevent out of memory issue. Nothing means no restriction on 
   -- the channels size.
@@ -28,8 +30,22 @@ data LiveProfileOpts = LiveProfileOpts {
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
     eventLogChunkSize = 512 -- 1 Kb
-  , eventLogListenPort = 8242 
-  , eventLogMessageTimeout = fromIntegral 360
+  , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
   , eventMessageMaxSize = Nothing
+  }
+
+-- | Options for live profile client side
+data LiveProfileClientOpts = LiveProfileClientOpts {
+  -- | Target address where the client connects to 
+    clientTargetAddr :: !(SocketAddress Inet6)
+  -- | How long to wait until the server drops outdated sequences of partial messages and blocks.
+  , clientMessageTimeout :: !NominalDiffTime
+  } deriving Show 
+
+-- | Default values for options of live profiler client
+defaultLiveProfileClientOpts :: LiveProfileClientOpts
+defaultLiveProfileClientOpts = LiveProfileClientOpts {
+    clientTargetAddr = SocketAddressInet6 inet6Loopback 8242 0 0
+  , clientMessageTimeout = fromIntegral (360 :: Int)
   }
