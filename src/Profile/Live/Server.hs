@@ -3,9 +3,16 @@ module Profile.Live.Server(
   ) where 
 
 import Control.Concurrent
+import Control.DeepSeq
 import Control.Exception 
 import Control.Monad 
+import Control.Monad.State.Strict
+import Control.Monad.Writer.Strict (runWriter)
+import Data.Binary.Serialise.CBOR 
+import Data.Storable.Endian
 import Data.Time.Clock
+import Data.Word 
+import Foreign 
 
 import Profile.Live.Options 
 import Profile.Live.State 
@@ -17,6 +24,9 @@ import System.Socket.Type.Stream
 import System.Timeout
 
 import Profile.Live.Server.Collector
+
+import qualified Data.ByteString.Lazy as BS 
+import qualified Data.ByteString.Unsafe as BS 
 
 -- | Socket type that is used for the server
 type ServerSocket = Socket Inet6 Stream TCP
@@ -53,9 +63,31 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm = do
 
     listenThread p = forkIO $ go (emptyMessageCollector eventLogMessageTimeout)
       where 
-      go collector = forever yield -- do 
-        -- get message
-        -- get current time
-        -- stepMessageCollector curTime msg 
-        -- recursion
+      go collector = do 
+        mmsg <- recieveMessage p
+        case mmsg of 
+          Nothing -> go collector
+          Just msg -> do 
+            curTime <- getCurrentTime
+            let stepper = stepMessageCollector curTime msg
+            let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
+            logProf' logger msgs
+            case evs of 
+              Left smsg -> do 
+                logProf logger $ "Got service msg: " <> toLogStr (show smsg)
+              Right evts -> do 
+                forM_ evts $ \evt -> logProf logger $ "Got event: " <> toLogStr (show evt)
+            collector' `deepseq` go collector'
+
+    recieveMessage p = do 
+      lbytes <- receive p 4 msgWaitAll
+      (l :: Word32) <- BS.unsafeUseAsCString lbytes $ peekBE . castPtr
+      msgbytes <- receive p (fromIntegral l) msgWaitAll
+      case deserialiseOrFail $ BS.fromStrict msgbytes of 
+        Left er -> do
+          logProf logger $ "Failed to deserialize message: " <> toLogStr (show er) 
+            <> ", payload: " <> toLogStr (show msgbytes)
+          return Nothing
+        Right msg -> return msg 
+
     senderThread p = forkIO $ forever yield

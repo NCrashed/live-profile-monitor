@@ -4,6 +4,7 @@ module Profile.Live.State(
   , untilTerminated
   , whenJust
   , logProf
+  , logProf'
   -- * Reexports
   , Monoid(..)
   , (<>)
@@ -57,3 +58,7 @@ whenJust (Just x) m = m x
 -- | Helper to log in live profiler
 logProf :: LoggerSet -> LogStr -> IO ()
 logProf logger msg = pushLogStrLn logger $ "Live profiler: " <> msg
+
+-- | Helper to log in live profiler, without prefix
+logProf' :: LoggerSet -> LogStr -> IO ()
+logProf' = pushLogStrLn
