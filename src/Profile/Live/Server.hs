@@ -80,33 +80,41 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
       _ <- senderThread p addr
       return ()
 
-    listenThread p addr = forkIO $ closeOnExit p addr $ go (emptyMessageCollector eventLogMessageTimeout)
-      where 
-      go collector = do 
-        mmsg <- recieveMessage p
-        case mmsg of 
-          Left er -> do
-            logProf logger er
-            go collector
-          Right msg -> do 
-            logProf logger $ "RECIEVED MESSAGE:" <> showl msg
-            curTime <- getCurrentTime
-            let stepper = stepMessageCollector curTime msg
-            let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
-            logProf' logger msgs
-            case evs of 
-              CollectorHeader h -> do 
-                logProf logger $ "Collected full header with " 
-                  <> showl (length $ eventTypes h) <> " event types"
-              CollectorService smsg -> do 
-                logProf logger $ "Got service message" <> showl smsg
-              CollectorEvents es -> do
-                forM_ es $ \e -> do
-                  logProf logger $ "Got event: " <> showl e
-            collector' `deepseq` go collector'
-
+    listenThread p addr = forkIO $ closeOnExit p addr $ 
+      runEventListener logger p eventLogMessageTimeout
     senderThread p addr = forkIO $ closeOnExit p addr $ 
       runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
+
+-- | Helper for creation listening threads that accepts eventlog messages from socket
+runEventListener :: LoggerSet -- ^ Where to spam about everthing
+  -> ServerSocket -- ^ Which socket to listen for incoming messages
+  -> NominalDiffTime -- ^ Timeout for collector internal state
+  -> IO ()
+runEventListener logger p msgTimeout = go (emptyMessageCollector msgTimeout)
+  where 
+  go collector = do 
+    mmsg <- recieveMessage p
+    case mmsg of 
+      Left er -> do
+        logProf logger er
+        go collector
+      Right msg -> do 
+        logProf logger $ "RECIEVED MESSAGE:" <> showl msg
+        curTime <- getCurrentTime
+        let stepper = stepMessageCollector curTime msg
+        let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
+        logProf' logger msgs
+        case evs of 
+          CollectorHeader h -> do 
+            logProf logger $ "Collected full header with " 
+              <> showl (length $ eventTypes h) <> " event types"
+          CollectorService smsg -> do 
+            logProf logger $ "Got service message" <> showl smsg
+          CollectorEvents es -> do
+            forM_ es $ \e -> do
+              logProf logger $ "Got event: " <> showl e
+        collector' `deepseq` go collector'
+
 
 -- | Helper for creation threads that sends events (and header) to the remote side
 runEventSender :: LoggerSet -- ^ Where to spam about everthing
