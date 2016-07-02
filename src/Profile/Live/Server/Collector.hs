@@ -25,7 +25,7 @@ import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as H
 import qualified Data.Sequence as S 
 
-import Profile.Live.Server.Message 
+import Profile.Live.Server.Message
 
 -- | State of message decoder, helps to collect partial and blocked messages into
 -- ordinal 'Event'
@@ -43,7 +43,9 @@ data MessageCollector = MessageCollector {
     -- | Holds intermediate state of header that is collected in the first phase of the protocol.
     -- The first word holds info about how many event types we await, the second how many we have 
     -- received.
-  , collectorHeader :: !(Maybe Word64, Word64, EventParserState)
+  , collectorHeader :: !(Maybe Word64, Word64)
+    -- | Current state of incremental parser
+  , collectorParser :: !EventParserState
   }
 
 instance NFData MessageCollector where 
@@ -51,7 +53,8 @@ instance NFData MessageCollector where
     collectorPartials `deepseq` 
     collectorBlocks `deepseq`
     collectorTimeout `deepseq`
-    (let (a, b, c) = collectorHeader in a `deepseq` b `seq` c `seq` ()) `seq` ()
+    (let (a, b) = collectorHeader in a `deepseq` b `seq` ()) `seq`
+    collectorParser `seq` ()
 
 -- | Initial state of message collector
 emptyMessageCollector :: NominalDiffTime -> MessageCollector 
@@ -59,20 +62,26 @@ emptyMessageCollector timeout = MessageCollector {
     collectorPartials = H.empty 
   , collectorBlocks = H.empty
   , collectorTimeout = timeout
-  , collectorHeader = (Nothing, 0, newParserState `pushBytes` ("hdrb" <> "hetb")) -- TODO: use constant from ghc-events
+  , collectorHeader = (Nothing, 0) 
+  , collectorParser = newParserState `pushBytes` ("hdrb" <> "hetb") -- TODO: use constant from ghc-events
   }
 
--- | Helper that returns 'True' only when collector has full header inside
-isHeaderCollected :: MessageCollector -> Bool 
-isHeaderCollected MessageCollector{..} = let 
-     (maxN, curN, _) = collectorHeader
+-- | Helper that returns 'True' only when collector doesn't have full header inside
+isHeaderNotCollected :: MessageCollector -> Bool 
+isHeaderNotCollected MessageCollector{..} = let 
+     (maxN, curN) = collectorHeader
   in isNothing maxN || fromMaybe 0 maxN > curN 
 
 -- | Return header that is collector in the message collected
 collectedEventlogHeader :: MessageCollector -> Maybe Header 
-collectedEventlogHeader MessageCollector{..} = let 
-     (_, _, parser) = collectorHeader
-  in readHeader parser
+collectedEventlogHeader MessageCollector{..} = readHeader collectorParser
+
+-- | Adding markers to header parser that indicates the end of header block 
+-- and start of event decoding.
+finaliseEventlogHeader :: MessageCollector -> MessageCollector
+finaliseEventlogHeader mc@MessageCollector{..} = mc {
+    collectorParser = collectorParser `pushBytes` ("hete" <> "hdre" <> "datb")  -- TODO: use constants from ghc-events
+  }
 
 -- | Possible outputs of message collector
 data CollectorOutput = 
@@ -87,11 +96,13 @@ stepMessageCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
   -> ProfileMsg -- ^ New message arrived
   -> m CollectorOutput -- ^ Result of decoded events
 stepMessageCollector curTime  msg = do
-  isPhase1 <- isHeaderCollected <$> get
+  isPhase1 <- isHeaderNotCollected <$> get
   case msg of
     ProfileService smsg -> return $ CollectorService smsg 
     ProfileHeader hmsg | isPhase1 -> do
       stepHeaderCollector hmsg 
+      isPhase2 <- not . isHeaderNotCollected <$> get
+      when isPhase2 $ modify' finaliseEventlogHeader 
       header <- gets collectedEventlogHeader
       return $ maybe (CollectorEvents S.empty) CollectorHeader header
     ProfileHeader hmsg | otherwise -> do 
@@ -100,8 +111,7 @@ stepMessageCollector curTime  msg = do
       return (CollectorEvents S.empty)
     ProfileEvent emsg -> do
       when isPhase1 $ tell "Live profiler: Got event message in first phase.\n"
-      (_, _, parser) <- gets collectorHeader
-      mseq <- stepEventCollector curTime parser emsg
+      mseq <- stepEventCollector curTime emsg
       return $ CollectorEvents $ fromMaybe mempty mseq
 
 -- | First phase of the collector when we collect header
@@ -109,37 +119,32 @@ stepHeaderCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
   => HeaderMsg -- ^ New message arrived 
   -> m () -- ^ Returns incremental parser ready for events consuming
 stepHeaderCollector hmsg = do
-  (maxN, curN, parser) <- gets collectorHeader
+  MessageCollector{..} <- get 
+  let (maxN, curN) = collectorHeader
   case hmsg of 
     HeaderLength n -> do
       when (isJust maxN) . tell $ "Live profiler: Received repeated header initiation message. It's not normal.\n"
       let maxN' = Just n
-      modify' $ \mc -> maxN' `seq` mc { collectorHeader = (maxN', curN, parser) }
+      modify' $ \mc -> maxN' `seq` mc { collectorHeader = (maxN', curN) }
     HeaderType bs -> do
       case maxN of 
         Just n | n <= curN -> do 
           tell $ "Live profiler: Received excess event type (" 
             <> toLogStr (show $ curN+1) <> "). It's not normal. Event type:" 
             <> toLogStr (show bs) <> "\n"
-        Just n | otherwise -> do 
-          let parser' = parser `pushBytes` bs -- TODO: use putEventType from GHC.RTS.Events
-              parser'' = if n == curN'
-                then parser' `pushBytes` ("hete" <> "hdre" <> "datb")  -- TODO: use constants from ghc-events
-                else parser'
-              curN' = curN + 1
-          modify' $ \mc -> parser'' `seq` curN' `seq` mc { collectorHeader = (maxN, curN', parser'') }
-        Nothing -> do
-          let parser' = parser `pushBytes` bs -- TODO: use putEventType from GHC.RTS.Events
-              curN' = curN + 1
-          modify' $ \mc -> parser' `seq` curN' `seq` mc { collectorHeader = (maxN, curN', parser') }
+        _ -> do 
+          let curN' = curN + 1
+          modify' $ \mc -> curN' `seq` mc { 
+              collectorHeader = (maxN, curN') 
+            , collectorParser = collectorParser `pushBytes` bs -- TODO: use putEventType from GHC.RTS.Events
+            }
 
 -- | Perform one step of converting the profiler protocol into events
 stepEventCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
   => UTCTime -- ^ Current time
-  -> EventParserState -- ^ Incremental parser with fully feeded header
   -> EventMsg -- ^ New message arrived
   -> m (Maybe (S.Seq Event)) -- ^ Result of decoded event if any
-stepEventCollector curTime parser msg = case msg of
+stepEventCollector curTime msg = case msg of
   EventBlockMsg bmsg -> collectorBlock bmsg 
   EventMsg pmsg -> do 
     res <- collectorPartial pmsg 
@@ -244,23 +249,27 @@ stepEventCollector curTime parser msg = case msg of
           where
             es' = (epartMsgNum, epartMsgPayload) `orderedInsert` es 
             payload = F.foldl' (\acc s -> acc <> s) BS.empty $ snd `fmap` es'
-            (parsed, _) = readEvent $ pushBytes parser payload 
     where 
       -- We drop new parser state as we always 
       -- feed enough data to get new event. Pure parser state cannot be stored as collector state
       -- as the bits could arrive in out of order.
-      withParsed payload m = case fst . readEvent $ pushBytes parser payload of 
-        Incomplete -> do
-          tell $ "Live profiler: Received incomplete message: " <> toLogStr (show payload) <> ", please report a bug.\n"
-          return Nothing -- something went wrong.
-        Complete -> do
-          tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
-          return Nothing -- something went wrong.
-        ParseError s -> do
-          tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
-            <> ". Error: " <> toLogStr s <> "\n"
-          return Nothing  -- something went wrong. 
-        Item ev -> m ev 
+      withParsed payload m = do 
+        parser <- gets collectorParser
+        let (res, parser') = readEvent $ pushBytes parser payload
+        case res of 
+          Incomplete -> do
+            modify' $ \mc -> mc { collectorParser = parser' }
+            return Nothing
+          Complete -> do
+            tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
+            return Nothing -- something went wrong.
+          ParseError s -> do
+            tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
+              <> ". Error: " <> toLogStr s <> "\n"
+            return Nothing  -- something went wrong. 
+          Item ev -> do 
+            modify' $ \mc -> mc { collectorParser = parser' }
+            m ev 
 
 -- | Inserts the pair into sequence with preserving ascending order
 orderedInsert :: Ord a => (a, b) -> S.Seq (a, b) -> S.Seq (a, b)

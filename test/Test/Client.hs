@@ -35,7 +35,7 @@ receiveRemoteEventlog filename = void . forkIO $ do
     mres <- atomically $ readTChan chan
     case mres of 
       Left hdr -> do 
-        hPutStr h $ show hdr
+        hPutStrLn h $ show hdr
       Right e -> do 
-        hPutStr h $ show e
+        hPutStrLn h $ show e
     hFlush h 
