@@ -3,17 +3,21 @@ module Profile.Live.Server(
   ) where 
 
 import Control.Concurrent
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TBMChan
 import Control.DeepSeq
 import Control.Exception 
 import Control.Monad 
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict (runWriter)
-import Data.Binary.Serialise.CBOR 
+import Data.Binary.Serialise.CBOR
 import Data.IORef 
+import Data.Maybe
 import Data.Storable.Endian
 import Data.Time.Clock
 import Data.Word 
-import Foreign 
+import Foreign hiding (void)
+import Foreign.C.Types 
 
 import Profile.Live.Options 
 import Profile.Live.State 
@@ -25,9 +29,12 @@ import System.Socket.Type.Stream
 import System.Timeout
 
 import Profile.Live.Server.Collector
+import Profile.Live.Server.Message 
+import Profile.Live.Server.Splitter
 
 import qualified Data.ByteString.Lazy as BS 
 import qualified Data.ByteString.Unsafe as BS 
+import qualified Data.Sequence as S 
 
 -- | Socket type that is used for the server
 type ServerSocket = Socket Inet6 Stream TCP
@@ -42,7 +49,7 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> EventTypeChan -- ^ Channel for event types, closed as soon as first event occured
   -> EventChan -- ^ Channel for events
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ _ _ = do 
+startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan = do 
   forkIO $ do 
     logProf logger "Server thread started"
     withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
@@ -76,6 +83,7 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ _ _ = do
         case mmsg of 
           Nothing -> go collector
           Just msg -> do 
+            logProf logger $ "RECIEVED MESSAGE:" <> toLogStr (show msg)
             curTime <- getCurrentTime
             let stepper = stepMessageCollector curTime msg
             let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
@@ -86,6 +94,21 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ _ _ = do
               Right evts -> do 
                 forM_ evts $ \evt -> logProf logger $ "Got event: " <> toLogStr (show evt)
             collector' `deepseq` go collector'
+
+    senderThread p = forkIO $ goHeader S.empty
+      where 
+      goHeader ets = do 
+        met <- atomically $ readTBMChan eventTypeChan
+        case met of 
+          -- header is complete
+          Nothing -> do
+            mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
+            goMain . emptySplitterState $ fromMaybe maxBound eventMessageMaxSize 
+          Just et -> do 
+            let ets' = ets S.|> et 
+            ets' `seq` goHeader ets'
+
+      goMain splitter = forever yield
 
     recieveMessage p = do 
       lbytes <- receive p 4 msgWaitAll
@@ -98,4 +121,10 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ _ _ = do
           return Nothing
         Right msg -> return msg 
 
-    senderThread p = forkIO $ forever yield
+    sendMessage p msg = do 
+      let msgbytes = serialise msg 
+      let lbytes = fromIntegral (BS.length msgbytes) :: Word32
+      allocaArray 4 $ \(ptr :: Ptr CUChar) -> do 
+        pokeBE (castPtr ptr) lbytes
+        lbs <- BS.fromStrict <$> BS.unsafePackCStringLen (castPtr ptr, 4) 
+        void $ send p (BS.toStrict $ lbs <> msgbytes) mempty

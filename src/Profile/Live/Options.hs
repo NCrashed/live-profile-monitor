@@ -19,6 +19,9 @@ data LiveProfileOpts = LiveProfileOpts {
   -- will drop the new items to prevent out of memory issue. Nothing means no restriction on 
   -- the channels size.
 , eventChannelMaximumSize :: !(Maybe Word)
+  -- | If the datagram transport is used (UDP) the option bounds maximum size of single message.
+  -- Set 'Nothing' to never split payload into several messages.
+, eventMessageMaxSize :: !(Maybe Word)
 } deriving Show 
 
 -- | Default options of live profile
@@ -28,4 +31,5 @@ defaultLiveProfileOpts = LiveProfileOpts {
   , eventLogListenPort = 8242 
   , eventLogMessageTimeout = fromIntegral 360
   , eventChannelMaximumSize = Just 1000000
+  , eventMessageMaxSize = Nothing
   }

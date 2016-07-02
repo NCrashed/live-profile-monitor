@@ -48,11 +48,11 @@ emptySplitterState datagramSize = SplitterState {
   }
 
 -- | Generate sequence of messages for header
-mkHeaderMsgs :: Header -> S.Seq HeaderMsg 
-mkHeaderMsgs (Header ets) = header S.<| msgs 
+mkHeaderMsgs :: S.Seq EventType -> S.Seq HeaderMsg 
+mkHeaderMsgs ets = header S.<| msgs 
   where 
-  header = HeaderLength (fromIntegral $ length ets)
-  msgs = HeaderType . BSL.toStrict . runPut . putEventType <$> S.fromList ets
+  header = HeaderLength (fromIntegral $ S.length ets)
+  msgs = HeaderType . BSL.toStrict . runPut . putEventType <$> ets
 
 -- | Generator of protocol messages from GHC events
 stepSplitter :: (MonadState SplitterState m, MonadWriter LogStr m)
