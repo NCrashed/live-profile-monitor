@@ -11,16 +11,13 @@ module Profile.Live.Server.Splitter(
 import Control.DeepSeq
 import Control.Monad
 import Control.Monad.State.Class
-import Control.Monad.Writer.Class
 import Data.Binary.Put
 import GHC.Generics 
 import GHC.RTS.Events
 import Profile.Live.Server.Message
-import System.Log.FastLogger
 import Data.Word 
 
 import qualified Data.Sequence as S 
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 
 data SplitterState = SplitterState {
@@ -55,9 +52,9 @@ mkHeaderMsgs ets = header S.<| msgs
   msgs = HeaderType . BSL.toStrict . runPut . putEventType <$> ets
 
 -- | Generator of protocol messages from GHC events
-stepSplitter :: (MonadState SplitterState m, MonadWriter LogStr m)
+stepSplitter :: (MonadState SplitterState m)
   => Event 
-  -> m (S.Seq ProfileMsg)
+  -> m (S.Seq EventMsg)
 stepSplitter ev@Event{..} = do
   SplitterState{..} <- get  
   case evSpec of 
@@ -66,7 +63,7 @@ stepSplitter ev@Event{..} = do
           splitterCurrentBlock = Just (splitterNextBlockId, block_size)
         , splitterNextBlockId = splitterNextBlockId + 1
         }
-      return . S.singleton . ProfileEvent . EventBlockMsg . EventBlockMsgHeader $ EventBlockMsgData {
+      return . S.singleton . EventBlockMsg . EventBlockMsgHeader $ EventBlockMsgData {
           eblockMsgDataId = splitterNextBlockId
         , eblockMsgDataBeginTimestamp = evTime
         , eblockMsgDataEndTimestamp = end_time
@@ -74,17 +71,17 @@ stepSplitter ev@Event{..} = do
         , eblockMsgDataEventsCount = block_size
         }
     _ -> case splitterCurrentBlock of 
-      Nothing -> fmap (ProfileEvent . EventMsg) <$> makePartial ev 
-      Just (blockId, curBlockSize) -> do 
+      Nothing -> fmap EventMsg <$> makePartial ev 
+      Just (_, curBlockSize) -> do 
         msgs <- makePartial ev 
         when (curBlockSize <= 1) $ modify' $ \ss -> ss {
             splitterCurrentBlock = Nothing
           }
-        return $ ProfileEvent . EventMsg <$> msgs
+        return $ EventMsg <$> msgs
 
 -- | Make sequence of network messages from given event, and the event payload
 -- is splitted by max datagram size
-makePartial :: (MonadState SplitterState m, MonadWriter LogStr m)
+makePartial :: (MonadState SplitterState m)
   => Event 
   -> m (S.Seq EventMsgPartial)
 makePartial ev = do 

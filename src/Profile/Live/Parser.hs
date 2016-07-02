@@ -7,7 +7,6 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TBMChan
 import Control.Exception (bracket)
 import Control.Monad (void)
-import Data.IORef 
 import Data.Maybe
 import Debug.Trace
 import Foreign hiding (void)
@@ -77,7 +76,7 @@ redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan event
         whenJust mhmsg $ logProf logger
 
         --logProf logger $ toLogStr $ show e 
-        memsg <- atomically $ putEvent e
+        memsg <- atomically $ putEvent' e
         whenJust memsg $ logProf logger
       Incomplete -> return ()
       Complete -> return ()
@@ -88,11 +87,11 @@ redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan event
   putHeader parserState = case readHeader parserState of 
     Nothing -> return . Just $ "parserThread warning: got no header, that is definitely a bug.\n"
     Just Header{..} -> do 
-      msgs <- catMaybes <$> mapM putEventType eventTypes
+      msgs <- catMaybes <$> mapM putEventType' eventTypes
       return $ if null msgs then Nothing else Just $ mconcat msgs
 
-  putEventType = putChannel eventTypeChan "parserThread: dropped event type as channel is overflowed.\n"
-  putEvent = putChannel eventChan "parserThread: dropped event type as channel is overflowed.\n"
+  putEventType' = putChannel eventTypeChan "parserThread: dropped event type as channel is overflowed.\n"
+  putEvent' = putChannel eventChan "parserThread: dropped event type as channel is overflowed.\n"
 
   putChannel :: forall a . TBMChan a -> LogStr -> a -> STM (Maybe LogStr)
   putChannel chan msg i = do 

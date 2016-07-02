@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Profile.Live.Server.Collector(
     MessageCollector
+  , CollectorOutput(..)
   , emptyMessageCollector
   , stepMessageCollector
   ) where 
@@ -16,6 +18,7 @@ import Data.Word
 import GHC.RTS.Events
 import GHC.RTS.EventsIncremental
 import System.Log.FastLogger
+import GHC.Generics 
 
 import qualified Data.ByteString as BS 
 import qualified Data.Foldable as F 
@@ -59,25 +62,47 @@ emptyMessageCollector timeout = MessageCollector {
   , collectorHeader = (Nothing, 0, newParserState `pushBytes` ("hdrb" <> "hetb")) -- TODO: use constant from ghc-events
   }
 
+-- | Helper that returns 'True' only when collector has full header inside
+isHeaderCollected :: MessageCollector -> Bool 
+isHeaderCollected MessageCollector{..} = let 
+     (maxN, curN, _) = collectorHeader
+  in isNothing maxN || fromMaybe 0 maxN > curN 
+
+-- | Return header that is collector in the message collected
+collectedEventlogHeader :: MessageCollector -> Maybe Header 
+collectedEventlogHeader MessageCollector{..} = let 
+     (_, _, parser) = collectorHeader
+  in readHeader parser
+
+-- | Possible outputs of message collector
+data CollectorOutput = 
+    CollectorHeader !Header 
+  | CollectorService !ServiceMsg 
+  | CollectorEvents !(S.Seq Event)
+  deriving (Show, Generic)
+
 -- | Perform one step of converting the profiler protocol into events
 stepMessageCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
   => UTCTime -- ^ Current time
   -> ProfileMsg -- ^ New message arrived
-  -> m (Either ServiceMsg (S.Seq Event)) -- ^ Result of decoded events
+  -> m CollectorOutput -- ^ Result of decoded events
 stepMessageCollector curTime  msg = do
-  (maxN, curN, parser) <- gets collectorHeader
-  let isPhase1 = isNothing maxN || fromMaybe 0 maxN > curN 
+  isPhase1 <- isHeaderCollected <$> get
   case msg of
-    ProfileService smsg -> return $ Left smsg 
-    ProfileHeader hmsg | isPhase1 -> stepHeaderCollector hmsg >> return (Right S.empty)
+    ProfileService smsg -> return $ CollectorService smsg 
+    ProfileHeader hmsg | isPhase1 -> do
+      stepHeaderCollector hmsg 
+      header <- gets collectedEventlogHeader
+      return $ maybe (CollectorEvents S.empty) CollectorHeader header
     ProfileHeader hmsg | otherwise -> do 
       tell "Live profiler: Got header message in second phase.\n"
       stepHeaderCollector hmsg
-      return (Right S.empty)
+      return (CollectorEvents S.empty)
     ProfileEvent emsg -> do
       when isPhase1 $ tell "Live profiler: Got event message in first phase.\n"
+      (_, _, parser) <- gets collectorHeader
       mseq <- stepEventCollector curTime parser emsg
-      return $ Right $ fromMaybe mempty mseq
+      return $ CollectorEvents $ fromMaybe mempty mseq
 
 -- | First phase of the collector when we collect header
 stepHeaderCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)

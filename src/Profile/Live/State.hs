@@ -14,6 +14,7 @@ module Profile.Live.State(
   , LoggerSet
   , LogStr
   , ToLogStr(..)
+  , showl
   ) where 
 
 import Control.Concurrent
@@ -82,3 +83,7 @@ logProf logger msg = pushLogStrLn logger $ "Live profiler: " <> msg
 -- | Helper to log in live profiler, without prefix
 logProf' :: LoggerSet -> LogStr -> IO ()
 logProf' = pushLogStrLn
+
+-- | Shorthand for 'toLogStr . show'
+showl :: Show a => a -> LogStr
+showl = toLogStr . show 

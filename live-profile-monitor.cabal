@@ -68,3 +68,6 @@ test-suite test-monitor
     , bytestring >= 0.10
     , directory >= 1.2
     , fast-logger >= 2.4.6
+    , stm-chans >= 3.0
+    , ghc-events >= 0.5
+    , stm >= 2.4

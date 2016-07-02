@@ -18,6 +18,7 @@ import Data.Time.Clock
 import Data.Word 
 import Foreign hiding (void)
 import Foreign.C.Types 
+import GHC.RTS.Events hiding (ThreadId)
 
 import Profile.Live.Options 
 import Profile.Live.State 
@@ -46,8 +47,8 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> Termination  -- ^ When set we need to terminate self
   -> Termination  -- ^ When terminates we need to set this  
   -> IORef Bool -- ^ Holds flag whether the monitor is paused
-  -> EventTypeChan -- ^ Channel for event types, closed as soon as first event occured
-  -> EventChan -- ^ Channel for events
+  -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
+  -> EventChan -- ^ Channel for events (input)
   -> IO ThreadId
 startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan = do 
   forkIO $ do 
@@ -69,14 +70,14 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
     mres <- timeout 1000000 $ accept s
     whenJust mres $ uncurry acceptCon
     where 
-    closeOnExit p addr = bracket (return p) (\p -> closeCon p addr) . const 
+    closeOnExit p addr = bracket (return p) (\p' -> closeCon p' addr) . const 
     closeCon p addr = do 
       close p 
-      logProf logger $ "Live profile: closed connection to " <> toLogStr (show addr)
+      logProf logger $ "Live profile: closed connection to " <> showl addr
     acceptCon p addr = do 
-      logProf logger $ "Accepted connection from " <> toLogStr (show addr)
-      listenThread p addr
-      senderThread p addr
+      logProf logger $ "Accepted connection from " <> showl addr
+      _ <- listenThread p addr
+      _ <- senderThread p addr
       return ()
 
     listenThread p addr = forkIO $ closeOnExit p addr $ go (emptyMessageCollector eventLogMessageTimeout)
@@ -84,52 +85,78 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
       go collector = do 
         mmsg <- recieveMessage p
         case mmsg of 
-          Nothing -> go collector
-          Just msg -> do 
-            logProf logger $ "RECIEVED MESSAGE:" <> toLogStr (show msg)
+          Left er -> do
+            logProf logger er
+            go collector
+          Right msg -> do 
+            logProf logger $ "RECIEVED MESSAGE:" <> showl msg
             curTime <- getCurrentTime
             let stepper = stepMessageCollector curTime msg
             let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
             logProf' logger msgs
             case evs of 
-              Left smsg -> do 
-                logProf logger $ "Got service msg: " <> toLogStr (show smsg)
-              Right evts -> do 
-                forM_ evts $ \evt -> logProf logger $ "Got event: " <> toLogStr (show evt)
+              CollectorHeader h -> do 
+                logProf logger $ "Collected full header with " 
+                  <> showl (length $ eventTypes h) <> " event types"
+              CollectorService smsg -> do 
+                logProf logger $ "Got service message" <> showl smsg
+              CollectorEvents es -> do
+                forM_ es $ \e -> do
+                  logProf logger $ "Got event: " <> showl e
             collector' `deepseq` go collector'
 
-    senderThread p addr = forkIO $ closeOnExit p addr $ goHeader S.empty
-      where 
-      goHeader ets = do 
-        met <- atomically $ readTBMChan eventTypeChan
-        logProf logger $ "Readed from channel: " <> toLogStr (show met)
-        case met of 
-          -- header is complete
-          Nothing -> do
-            mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
-            goMain . emptySplitterState $ fromMaybe maxBound eventMessageMaxSize 
-          Just et -> do 
-            let ets' = ets S.|> et 
-            ets' `seq` goHeader ets'
+    senderThread p addr = forkIO $ closeOnExit p addr $ 
+      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
 
-      goMain splitter = forever yield
+-- | Helper for creation threads that sends events (and header) to the remote side
+runEventSender :: LoggerSet -- ^ Where to spam about everthing
+  -> ServerSocket -- ^ Socket where we send the messages about eventlog
+  -> Word -- ^ Maximum size of datagram
+  -> EventTypeChan -- ^ Channel to read eventlog header from
+  -> EventChan -- ^ Channel to read events from
+  -> IO ()
+runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
+  where 
+  goHeader ets = do 
+    met <- atomically $ readTBMChan eventTypeChan
+    logProf logger $ "Read header from channel: " <> showl met
+    case met of 
+      -- header is complete
+      Nothing -> do
+        mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
+        goMain $ emptySplitterState maxSize
+      Just et -> do 
+        let ets' = ets S.|> et 
+        ets' `seq` goHeader ets'
 
-    recieveMessage p = do 
-      lbytes <- receive p 4 msgWaitAll
-      (l :: Word32) <- BS.unsafeUseAsCString lbytes $ peekBE . castPtr
-      msgbytes <- receive p (fromIntegral l) msgWaitAll
-      case deserialiseOrFail $ BS.fromStrict msgbytes of 
-        Left er -> do
-          logProf logger $ "Failed to deserialize message: " <> toLogStr (show er) 
-            <> ", payload: " <> toLogStr (show msgbytes)
-          return Nothing
-        Right msg -> return msg 
+  goMain splitter = do 
+    me <- atomically $ readTBMChan eventChan
+    logProf logger $ "Read event from channel: " <> showl me
+    case me of 
+      Nothing -> return ()
+      Just e -> do 
+        let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
+        logProf' logger logMsgs
+        mapM_ (sendMessage p . ProfileEvent) msgs
+        splitter' `deepseq` goMain splitter'
 
-    sendMessage p msg = do 
-      logProf logger $ "Sending message " <> toLogStr (show msg)
-      let msgbytes = serialise msg 
-      let lbytes = fromIntegral (BS.length msgbytes) :: Word32
-      allocaArray 4 $ \(ptr :: Ptr CUChar) -> do 
-        pokeBE (castPtr ptr) lbytes
-        lbs <- BS.fromStrict <$> BS.unsafePackCStringLen (castPtr ptr, 4)
-        void $ send p (BS.toStrict $ lbs <> msgbytes) mempty
+-- | Helper to read next message from the socket
+recieveMessage :: ServerSocket -> IO (Either LogStr ProfileMsg)
+recieveMessage p = do 
+  lbytes <- receive p 4 (msgWaitAll <> msgNoSignal)
+  (l :: Word32) <- BS.unsafeUseAsCString lbytes $ peekBE . castPtr
+  msgbytes <- receive p (fromIntegral l) (msgWaitAll <> msgNoSignal)
+  case deserialiseOrFail $ BS.fromStrict msgbytes of 
+    Left er -> return . Left $ "Failed to deserialize message: " <> showl er 
+        <> ", payload: " <> showl msgbytes
+    Right msg -> return . Right $ msg 
+
+-- | Helper to write message into socket
+sendMessage :: ServerSocket -> ProfileMsg -> IO ()
+sendMessage p msg = do
+  let msgbytes = serialise msg 
+  let lbytes = fromIntegral (BS.length msgbytes) :: Word32
+  allocaArray 4 $ \(ptr :: Ptr CUChar) -> do 
+    pokeBE (castPtr ptr) lbytes
+    lbs <- BS.fromStrict <$> BS.unsafePackCStringLen (castPtr ptr, 4)
+    void $ send p (BS.toStrict $ lbs <> msgbytes) msgNoSignal
