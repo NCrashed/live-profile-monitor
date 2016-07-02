@@ -1,5 +1,9 @@
 module Profile.Live.Server(
+  -- * Server side
     startLiveServer
+  -- * Client side
+  , ClientBehavior(..)
+  , defaultClientBehavior
   , startLiveClient
   ) where 
 
@@ -85,13 +89,29 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
     senderThread p addr = forkIO $ closeOnExit p addr $ 
       runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
 
+-- | Customisable behavior of the eventlog client
+data ClientBehavior = ClientBehavior {
+  clientOnHeader :: !(Header -> IO ())  -- ^ Callback that is called when the client receives full header of the remote eventlog
+, clientOnEvent :: !(Event -> IO ()) -- ^ Callback that is called when the client receives a remote event
+, clientOnService :: !(ServiceMsg -> IO ()) -- ^ Callback that is called when the client receives service message from the server
+}
+
+-- | Client behavior that does nothing
+defaultClientBehavior :: ClientBehavior 
+defaultClientBehavior = ClientBehavior {
+    clientOnHeader = const $ return ()
+  , clientOnEvent = const $ return ()
+  , clientOnService = const $ return ()
+  }
+
 -- | Connect to remote app and recieve eventlog from it.
 startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
   -> LiveProfileClientOpts -- ^ Options for client side
   -> Termination  -- ^ When set we need to terminate self
   -> Termination  -- ^ When terminates we need to set this  
+  -> ClientBehavior -- ^ User specified callbacks 
   -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
-startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm = forkIO $ do 
+startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm cb = forkIO $ do 
   bracket socket clientClose $ \s -> connect s clientTargetAddr >> clientBody s
   logProf logger "Client thread terminated"
   where
@@ -105,15 +125,16 @@ startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm = forkIO $ do
     untilTerminated termVar () $ const yield
     putMVar thisTerm ()
 
-  listenThread s = forkIO $ runEventListener logger s clientMessageTimeout
+  listenThread s = forkIO $ runEventListener logger s clientMessageTimeout cb
   senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
-runEventListener :: LoggerSet -- ^ Where to spam about everthing
+runEventListener :: LoggerSet -- ^ Where to spam about everything
   -> ServerSocket -- ^ Which socket to listen for incoming messages
   -> NominalDiffTime -- ^ Timeout for collector internal state
+  -> ClientBehavior -- ^ User specified callbacks 
   -> IO ()
-runEventListener logger p msgTimeout = go (emptyMessageCollector msgTimeout)
+runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollector msgTimeout)
   where 
   go collector = do 
     mmsg <- recieveMessage p
@@ -131,11 +152,14 @@ runEventListener logger p msgTimeout = go (emptyMessageCollector msgTimeout)
           CollectorHeader h -> do 
             logProf logger $ "Collected full header with " 
               <> showl (length $ eventTypes h) <> " event types"
+            clientOnHeader h 
           CollectorService smsg -> do 
             logProf logger $ "Got service message" <> showl smsg
+            clientOnService smsg
           CollectorEvents es -> do
             forM_ es $ \e -> do
               logProf logger $ "Got event: " <> showl e
+              clientOnEvent e
         collector' `deepseq` go collector'
 
 
