@@ -10,6 +10,7 @@ module Profile.Live(
   ) where 
 
 import Control.Concurrent
+import Control.Concurrent.STM.TBMChan
 import Control.Monad.IO.Class
 import Data.IORef 
 import System.Log.FastLogger
@@ -29,6 +30,9 @@ initLiveProfile opts eventLogger = liftIO $ do
   eventLogPipeThread <- redirectEventlog eventLogger opts eventLogTerminate eventLogPipeThreadTerm eventLogPause
   eventLogServerThreadTerm <- newEmptyMVar
   eventLogServerThread <- startLiveServer eventLogger opts eventLogTerminate eventLogServerThreadTerm 
+  let maxSize = maybe maxBound fromIntegral $ eventChannelMaximumSize opts
+  eventTypeChan <- newTBMChanIO maxSize
+  eventChan <- newTBMChanIO maxSize
   return LiveProfiler {..}
 
 -- | Destroy live profiler.
