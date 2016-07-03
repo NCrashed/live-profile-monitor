@@ -29,10 +29,10 @@ data LiveProfileOpts = LiveProfileOpts {
 -- | Default options of live profile
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
-    eventLogChunkSize = 512 -- 1 Kb
+    eventLogChunkSize = 1024 * 1024 -- 1 Kb
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
-  , eventMessageMaxSize = Nothing
+  , eventMessageMaxSize = Just 100
   }
 
 -- | Options for live profile client side

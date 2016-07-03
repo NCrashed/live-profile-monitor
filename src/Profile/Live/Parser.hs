@@ -55,6 +55,7 @@ redirectEventlog :: LoggerSet -- ^ Monitor logger
   -> IO ThreadId -- ^ Forks new thread with incremental parser
 redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan eventChan = do
   forkIO . void . preserveEventlog logger eventLogChunkSize $ do 
+    labelCurrentThread "Parser"
     logProf logger "Parser thread started"
     untilTerminated termVar newParserState go
     putMVar thisTerm ()

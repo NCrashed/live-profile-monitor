@@ -8,6 +8,7 @@ module Profile.Live.State(
   , whenJust
   , logProf
   , logProf'
+  , labelCurrentThread
   -- * Reexports
   , Monoid(..)
   , (<>)
@@ -21,6 +22,7 @@ import Control.Concurrent
 import Control.Concurrent.STM.TBMChan
 import Data.IORef 
 import Data.Monoid
+import GHC.Conc.Sync (labelThread)
 import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
 
@@ -87,3 +89,9 @@ logProf' = pushLogStrLn
 -- | Shorthand for 'toLogStr . show'
 showl :: Show a => a -> LogStr
 showl = toLogStr . show 
+
+-- | Assign label to current thread
+labelCurrentThread :: String -> IO ()
+labelCurrentThread name = do 
+  tid <- myThreadId 
+  labelThread tid ("LiveProfile_" <> name)

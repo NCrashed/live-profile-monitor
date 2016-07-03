@@ -56,6 +56,7 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> EventChan -- ^ Channel for events (input)
   -> IO ThreadId
 startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan = forkIO $ do 
+  labelCurrentThread "Server"
   logProf logger "Server thread started"
   withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s
   putMVar thisTerm ()
@@ -80,13 +81,14 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
       logProf logger $ "Live profile: closed connection to " <> showl addr
     acceptCon p addr = do 
       logProf logger $ "Accepted connection from " <> showl addr
-      _ <- listenThread p addr
+      -- _ <- listenThread p addr
       _ <- senderThread p addr
       return ()
 
-    listenThread p addr = forkIO $ closeOnExit p addr $ 
-      forever yield -- TODO: add service messages listener
-    senderThread p addr = forkIO $ closeOnExit p addr $ 
+    --listenThread p addr = forkIO $ closeOnExit p addr $ 
+    --  forever yield -- TODO: add service messages listener
+    senderThread p addr = forkIO $ closeOnExit p addr $ do
+      labelCurrentThread $ "Sender_" <> show addr
       runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
 
 -- | Customisable behavior of the eventlog client
@@ -112,6 +114,7 @@ startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
   -> ClientBehavior -- ^ User specified callbacks 
   -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
 startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm cb = forkIO $ do 
+  labelCurrentThread "Client"
   bracket socket clientClose $ \s -> connect s clientTargetAddr >> clientBody s
   logProf logger "Client thread terminated"
   where
@@ -121,12 +124,14 @@ startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm cb = forkIO $ 
   clientBody s = do 
     logProf logger $ "Client thread started and connected to " <> showl clientTargetAddr
     _ <- listenThread s
-    _ <- senderThread s
+    --_ <- senderThread s
     untilTerminated termVar () $ const yield
     putMVar thisTerm ()
 
-  listenThread s = forkIO $ runEventListener logger s clientMessageTimeout cb
-  senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
+  listenThread s = forkIO $ do
+    labelCurrentThread "Client_listener"
+    runEventListener logger s clientMessageTimeout cb
+  --senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
 runEventListener :: LoggerSet -- ^ Where to spam about everything
@@ -143,7 +148,6 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
         logProf logger er
         go collector
       Right msg -> do 
-        logProf logger $ "RECEIVED MESSAGE:" <> showl msg
         curTime <- getCurrentTime
         let stepper = stepMessageCollector curTime msg
         let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
