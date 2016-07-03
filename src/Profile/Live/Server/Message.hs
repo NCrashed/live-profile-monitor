@@ -109,6 +109,15 @@ instance NFData Event where
 instance NFData KernelThreadId where 
   rnf (KernelThreadId v) = v `seq` ()
 
+instance NFData Data where 
+  rnf (Data es) = es `deepseq` ()
+
+instance NFData Header where 
+  rnf (Header ets) = ets `deepseq` ()
+  
+instance NFData EventLog where 
+  rnf (EventLog h d) = h `deepseq` d `deepseq` ()
+
 instance NFData EventInfo where 
   rnf e = case e of 
     EventBlock{..} -> end_time `seq` cap `seq` block_size `deepseq` ()

@@ -60,6 +60,7 @@ test-suite test-monitor
   main-is:          Main.hs
   other-modules:
     Test.Client
+    Test.Put
   ghc-options:      -eventlog -rtsopts -threaded
   build-depends: 
       base
@@ -71,3 +72,5 @@ test-suite test-monitor
     , ghc-events >= 0.5
     , stm >= 2.4
     , binary >= 0.7.6
+    , deepseq >= 1.4
+    , containers >= 0.5.6

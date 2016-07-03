@@ -8,11 +8,14 @@ import Profile.Live
 import System.Log.FastLogger
 
 import Test.Client
+import Test.Put 
 
 import System.Directory
 
 main :: IO ()
 main = do
+  runEventlogSerialisationTests
+
   logger <- newStdoutLoggerSet defaultBufSize
   bracket (initLiveProfile defaultLiveProfileOpts logger) stopLiveProfile $ const $ do
     flag <- doesFileExist "test.eventlog"

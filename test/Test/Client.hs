@@ -37,16 +37,18 @@ receiveRemoteEventlog filename = void . forkIO $ do
 
   writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
   writeLogFile term chan = withFile filename WriteMode $ \h -> 
-    untilTerminated term () $ const $ onExit (finishLog h) $ do 
+    onExit (finishLog h) $ untilTerminated term () $ const $ do 
       mres <- atomically $ readTChan chan
       case mres of 
         Left hdr -> do 
           BS.hPut h . BSL.toStrict . runPut $ do
-            putHeader hdr
-            putDataBeginMarker
+           putHeader hdr
+           putDataBeginMarker
+          --return ()
         Right e -> do 
+          --putStrLn $ show e 
           BS.hPut h . BSL.toStrict . runPut $ putEvent e
-          hPutStrLn h $ show e
+          --hPutStrLn h $ show e
       hFlush h 
     where 
     finishLog h = BS.hPut h . BSL.toStrict $ runPut putDataEndMarker
