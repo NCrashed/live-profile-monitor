@@ -66,7 +66,7 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
     setSocketOption s (ReuseAddress True)
     setSocketOption s (V6Only False)
     bind s (SocketAddressInet6 inet6Any eventLogListenPort 0 0)
-    listen s 0 -- implentation chooses the queue size
+    listen s 0 -- implementation chooses the queue size
     logProf logger "Server started to listen"
     m s
 
@@ -160,10 +160,7 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
           CollectorService smsg -> do 
             logProf logger $ "Got service message" <> showl smsg
             clientOnService smsg
-          CollectorEvents es -> do
-            forM_ es $ \e -> do
-              --logProf logger $ "Got event: " <> showl e
-              clientOnEvent e
+          CollectorEvents es -> mapM_ clientOnEvent es
         collector' `deepseq` go collector'
 
 
@@ -178,7 +175,6 @@ runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
   where 
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
-    --logProf logger $ "Read header from channel: " <> showl met
     case met of 
       Nothing -> do -- header is complete
         mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
@@ -189,11 +185,9 @@ runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
 
   goMain splitter = do 
     me <- atomically $ readTBMChan eventChan
-    --logProf logger $ "Read event from channel: " <> showl me
     case me of 
       Nothing -> return ()
       Just e -> do 
-        --logProf logger $ "Sending event: " <> showl e 
         let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
         logProf' logger logMsgs
         mapM_ (sendMessage p . ProfileEvent) msgs

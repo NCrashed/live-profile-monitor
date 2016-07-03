@@ -24,6 +24,10 @@ data LiveProfileOpts = LiveProfileOpts {
   -- | If the datagram transport is used (UDP) the option bounds maximum size of single message.
   -- Set 'Nothing' to never split payload into several messages.
 , eventMessageMaxSize :: !(Maybe Word)
+  -- | The live profile monitor has several threads that can excessively generate own eventlog 
+  -- events. It could add significant noise into resulting eventlog of whole application, so 
+  -- the options allows an user to drop off such uninformative events.
+, eventHideMonitorActivity :: !Bool
 } deriving Show 
 
 -- | Default options of live profile
@@ -33,6 +37,7 @@ defaultLiveProfileOpts = LiveProfileOpts {
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
   , eventMessageMaxSize = Nothing
+  , eventHideMonitorActivity = True
   }
 
 -- | Options for live profile client side

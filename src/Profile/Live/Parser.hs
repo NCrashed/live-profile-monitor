@@ -76,7 +76,6 @@ redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan event
             else return Nothing
         whenJust mhmsg $ logProf logger
 
-        --logProf logger $ toLogStr $ show e 
         memsg <- atomically $ putEvent' e
         whenJust memsg $ logProf logger
       Incomplete -> return ()

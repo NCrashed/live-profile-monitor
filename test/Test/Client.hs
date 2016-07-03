@@ -44,11 +44,8 @@ receiveRemoteEventlog filename = void . forkIO $ do
           BS.hPut h . BSL.toStrict . runPut $ do
            putHeader hdr
            putDataBeginMarker
-          --return ()
         Right e -> do 
-          --putStrLn $ show e 
           BS.hPut h . BSL.toStrict . runPut $ putEvent e
-          --hPutStrLn h $ show e
       hFlush h 
     where 
     finishLog h = BS.hPut h . BSL.toStrict $ runPut putDataEndMarker
