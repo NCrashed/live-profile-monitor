@@ -70,3 +70,4 @@ test-suite test-monitor
     , fast-logger >= 2.4.6
     , ghc-events >= 0.5
     , stm >= 2.4
+    , binary >= 0.7.6

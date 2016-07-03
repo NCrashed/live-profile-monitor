@@ -4,14 +4,19 @@ module Test.Client(
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad 
-import System.Log.FastLogger
+import Data.Binary.Put
 import GHC.RTS.Events 
 import System.IO
+import System.Log.FastLogger
 
 import Profile.Live.Options 
 import Profile.Live.Server
 import Profile.Live.State 
+
+import qualified Data.ByteString as BS 
+import qualified Data.ByteString.Lazy as BSL
 
 receiveRemoteEventlog :: FilePath -> IO ()
 receiveRemoteEventlog filename = void . forkIO $ do 
@@ -31,11 +36,19 @@ receiveRemoteEventlog filename = void . forkIO $ do
   where
 
   writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
-  writeLogFile term chan = withFile filename WriteMode $ \h -> untilTerminated term () $ const $ do 
-    mres <- atomically $ readTChan chan
-    case mres of 
-      Left hdr -> do 
-        hPutStrLn h $ show hdr
-      Right e -> do 
-        hPutStrLn h $ show e
-    hFlush h 
+  writeLogFile term chan = withFile filename WriteMode $ \h -> 
+    untilTerminated term () $ const $ onExit (finishLog h) $ do 
+      mres <- atomically $ readTChan chan
+      case mres of 
+        Left hdr -> do 
+          BS.hPut h . BSL.toStrict . runPut $ do
+            putHeader hdr
+            putDataBeginMarker
+        Right e -> do 
+          BS.hPut h . BSL.toStrict . runPut $ putEvent e
+          hPutStrLn h $ show e
+      hFlush h 
+    where 
+    finishLog h = BS.hPut h . BSL.toStrict $ runPut putDataEndMarker
+
+  onExit m = bracket (pure ()) (const m) . const
