@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedLists #-}
 module Profile.Live.Server.Splitter(
     SplitterState
   , emptySplitterState
@@ -71,7 +70,9 @@ stepSplitter ev@Event{..} = do
         , eblockMsgDataEventsCount = block_size
         }
     _ -> case splitterCurrentBlock of 
-      Nothing -> fmap EventMsg <$> makePartial ev 
+      Nothing -> do
+        msgs <- makePartial ev
+        return $ EventMsg <$> msgs
       Just (_, curBlockSize) -> do 
         msgs <- makePartial ev 
         when (curBlockSize <= 1) $ modify' $ \ss -> ss {
@@ -97,13 +98,13 @@ makePartial ev = do
               epartialMsgId = splitterNextMessageId
             , epartialMsgParts = fromIntegral $ S.length payloads
             }
-          mkMsg bs i = EventMsgPart {
+          mkMsg i bs = EventMsgPart {
               epartMsgId = splitterNextMessageId
-            , epartMsgNum = i 
+            , epartMsgNum = fromIntegral i 
             , epartMsgPayload = BSL.toStrict bs
             }
-          msgs = uncurry mkMsg <$> payloads `S.zip` [0 ..]
-      return $ headMsg S.<| msgs 
+          msgs = S.mapWithIndex mkMsg payloads
+      return $ headMsg S.<| msgs
     else return . S.singleton . EventMsgFull . BSL.toStrict $ payload  
   where 
   accumUnless :: (a -> Bool) -> (a -> (b, a)) -> a -> S.Seq b 

@@ -32,7 +32,7 @@ defaultLiveProfileOpts = LiveProfileOpts {
     eventLogChunkSize = 1024 * 1024 -- 1 Kb
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
-  , eventMessageMaxSize = Just 100
+  , eventMessageMaxSize = Nothing
   }
 
 -- | Options for live profile client side

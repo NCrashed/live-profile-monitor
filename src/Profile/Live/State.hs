@@ -84,7 +84,7 @@ logProf logger msg = pushLogStrLn logger $ "Live profiler: " <> msg
 
 -- | Helper to log in live profiler, without prefix
 logProf' :: LoggerSet -> LogStr -> IO ()
-logProf' = pushLogStrLn
+logProf' = pushLogStr
 
 -- | Shorthand for 'toLogStr . show'
 showl :: Show a => a -> LogStr

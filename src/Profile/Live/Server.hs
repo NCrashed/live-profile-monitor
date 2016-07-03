@@ -152,7 +152,7 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
         let stepper = stepMessageCollector curTime msg
         let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
         logProf' logger msgs
-        case evs of 
+        forM_ evs $ \ev -> case ev of 
           CollectorHeader h -> do 
             logProf logger $ "Collected full header with " 
               <> showl (length $ eventTypes h) <> " event types"
@@ -162,7 +162,7 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
             clientOnService smsg
           CollectorEvents es -> do
             forM_ es $ \e -> do
-              logProf logger $ "Got event: " <> showl e
+              --logProf logger $ "Got event: " <> showl e
               clientOnEvent e
         collector' `deepseq` go collector'
 
@@ -178,7 +178,7 @@ runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
   where 
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
-    logProf logger $ "Read header from channel: " <> showl met
+    --logProf logger $ "Read header from channel: " <> showl met
     case met of 
       Nothing -> do -- header is complete
         mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
@@ -189,10 +189,11 @@ runEventSender logger p maxSize eventTypeChan eventChan = goHeader S.empty
 
   goMain splitter = do 
     me <- atomically $ readTBMChan eventChan
-    logProf logger $ "Read event from channel: " <> showl me
+    --logProf logger $ "Read event from channel: " <> showl me
     case me of 
       Nothing -> return ()
       Just e -> do 
+        --logProf logger $ "Sending event: " <> showl e 
         let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
         logProf' logger logMsgs
         mapM_ (sendMessage p . ProfileEvent) msgs
