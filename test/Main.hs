@@ -13,12 +13,15 @@ import Test.Put
 
 import System.Directory
 
-foreign import ccall "startProfiler" startProfiler :: IO ()
+import Foreign 
+import Foreign.C 
+
+foreign import ccall "startProfiler" startProfiler :: CString -> IO ()
 foreign import ccall "stopProfiler" stopProfiler :: IO ()
 
 main :: IO ()
 main = do
-  startProfiler
+  withCString "event.pipe" startProfiler
   forM_ [0 .. 1000000] $ \i -> traceEventIO $ "MyEvent" ++ show i
   stopProfiler
 
