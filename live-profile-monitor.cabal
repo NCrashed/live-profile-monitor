@@ -24,6 +24,9 @@ library
     Profile.Live.Server.Collector
     Profile.Live.Server.Splitter
     Profile.Live.State
+  c-sources:
+    cbits/profiler.c 
+    
   build-depends:       
       base >= 4.7 && < 5
     , binary >= 0.7.6

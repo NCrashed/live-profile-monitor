@@ -1,0 +1,16 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+  "build_systems":
+  [
+    {
+      "name": "Stack",
+      "shell_cmd": "stack install --compiler=ghc-8.1",
+      "working_dir": "${project_path}"
+    }
+  ]
+}

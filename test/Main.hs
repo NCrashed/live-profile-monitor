@@ -1,3 +1,4 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Main where
 
 import Control.Concurrent
@@ -12,14 +13,22 @@ import Test.Put
 
 import System.Directory
 
+foreign import ccall "startProfiler" startProfiler :: IO ()
+foreign import ccall "stopProfiler" stopProfiler :: IO ()
+
 main :: IO ()
 main = do
-  runEventlogSerialisationTests
+  startProfiler
+  forM_ [0 .. 1000000] $ \i -> traceEventIO $ "MyEvent" ++ show i
+  stopProfiler
+
+{-  runEventlogSerialisationTests
 
   logger <- newStdoutLoggerSet defaultBufSize
   bracket (initLiveProfile defaultLiveProfileOpts logger) stopLiveProfile $ const $ do
     flag <- doesFileExist "test.eventlog"
     when flag $ removeFile "test.eventlog"
     receiveRemoteEventlog "test.eventlog"
-    void $ replicateM 100000 $ traceEventIO "MyEvent"
-    threadDelay 10000000
+    forM_ [0 .. 10000] $ \i -> traceEventIO $ "MyEvent" ++ show i
+    threadDelay 30000000
+-}

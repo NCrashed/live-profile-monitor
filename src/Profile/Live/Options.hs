@@ -37,7 +37,7 @@ defaultLiveProfileOpts = LiveProfileOpts {
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
   , eventMessageMaxSize = Nothing
-  , eventHideMonitorActivity = True
+  , eventHideMonitorActivity = False
   }
 
 -- | Options for live profile client side
