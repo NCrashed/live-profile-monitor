@@ -9,17 +9,21 @@ import Test.Client
 import Test.Put 
 
 import System.Directory
+import System.Process 
 
 import Foreign 
 import Foreign.C 
 
-import Control.Exception (bracket)
-import Debug.Trace 
-import Profile.Live.Leech
-
 main :: IO ()
-main = bracket (startLeech defaultLeechOptions) (const stopLeech) $ const $ do 
-  forM_ [0 .. 1000000] $ \i -> traceEventIO $ "MyEvent" ++ show i
+main = do 
+  runEventlogSerialisationTests
+
+  flag <- doesFileExist "test.eventlog"
+  when flag $ removeFile "test.eventlog"
+  receiveRemoteEventlog "test.eventlog"
+
+  callCommand "hs-live-profile ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech"
+  -- TODO: make termination protocol
 
 {-  runEventlogSerialisationTests
 

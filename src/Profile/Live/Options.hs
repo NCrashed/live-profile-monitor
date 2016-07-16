@@ -9,12 +9,15 @@ module Profile.Live.Options(
 
 import System.Socket.Family.Inet6
 import Data.Time.Clock
+import Data.Word 
 
 -- | Options of live profile monitor
 data LiveProfileOpts = LiveProfileOpts {
   -- | Chunk size to get from eventlog before feeding into incremental parser
-  -- TODO: make the size also the size of eventlog buffers
-  eventLogChunkSize :: !Word
+  eventLogChunkSize :: !Word64
+  -- | Name of pipe (file path on linux, name of named pipe on Windows) where profiled
+  -- application put its events.
+, eventLogPipeName :: !FilePath
   -- | Port that is used to listen for incoming connections.
 , eventLogListenPort :: !Inet6Port
   -- | How many items in internal channels we hold. If there are additional items, the system
@@ -33,7 +36,8 @@ data LiveProfileOpts = LiveProfileOpts {
 -- | Default options of live profile
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
-    eventLogChunkSize = 1024 * 1024 -- 1 Kb
+    eventLogChunkSize = 1024 -- 1 Kb
+  , eventLogPipeName = "events.pipe"
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Just 1000000
   , eventMessageMaxSize = Nothing
