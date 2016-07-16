@@ -38,6 +38,7 @@ resolver: nightly-2016-06-29
 packages:
 - ghc-events/
 - binary-serialise-cbor/
+- live-profile-leech/
 - '.'
 
 # Dependency packages to be pulled from upstream that are not in the resolver

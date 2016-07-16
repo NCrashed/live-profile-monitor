@@ -1,6 +1,7 @@
 packages: 
   ghc-events/
   binary-serialise-cbor/
-
+  live-profile-leech/
+  
 package binary-serialize-cbor 
   flags: -newtime15

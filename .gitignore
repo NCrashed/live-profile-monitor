@@ -6,3 +6,4 @@ dist
 dist-newstyle
 *.eventlog
 cabal.project.local
+live-profile-leech/.stack-work

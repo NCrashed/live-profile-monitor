@@ -2,10 +2,7 @@
 module Main where
 
 import Control.Concurrent
-import Control.Exception (bracket)
 import Control.Monad 
-import Debug.Trace 
-import Profile.Live
 import System.Log.FastLogger
 
 import Test.Client
@@ -16,14 +13,13 @@ import System.Directory
 import Foreign 
 import Foreign.C 
 
-foreign import ccall "startProfiler" startProfiler :: CString -> IO ()
-foreign import ccall "stopProfiler" stopProfiler :: IO ()
+import Control.Exception (bracket)
+import Debug.Trace 
+import Profile.Live.Leech
 
 main :: IO ()
-main = do
-  withCString "event.pipe" startProfiler
+main = bracket (startLeech defaultLeechOptions) (const stopLeech) $ const $ do 
   forM_ [0 .. 1000000] $ \i -> traceEventIO $ "MyEvent" ++ show i
-  stopProfiler
 
 {-  runEventlogSerialisationTests
 
