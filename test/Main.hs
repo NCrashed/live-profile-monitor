@@ -18,20 +18,11 @@ main :: IO ()
 main = do 
   runEventlogSerialisationTests
 
+  ph <- spawnCommand "hs-live-profile ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech"
+
+  threadDelay 1000000
   flag <- doesFileExist "test.eventlog"
   when flag $ removeFile "test.eventlog"
   receiveRemoteEventlog "test.eventlog"
 
-  callCommand "hs-live-profile ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech"
-  -- TODO: make termination protocol
-
-{-  runEventlogSerialisationTests
-
-  logger <- newStdoutLoggerSet defaultBufSize
-  bracket (initLiveProfile defaultLiveProfileOpts logger) stopLiveProfile $ const $ do
-    flag <- doesFileExist "test.eventlog"
-    when flag $ removeFile "test.eventlog"
-    receiveRemoteEventlog "test.eventlog"
-    forM_ [0 .. 10000] $ \i -> traceEventIO $ "MyEvent" ++ show i
-    threadDelay 30000000
--}
+  print =<< waitForProcess ph
