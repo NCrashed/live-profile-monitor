@@ -40,7 +40,5 @@ startPipe PipeOptions{..} = liftIO $ withCString pipeName $ \pn -> do
     pipeCallback bs 
   c_startPipe pn pipeBufferSize cb
   return $ do
-    -- c_stopPipe -- TODO: why this function cause not resuming to execution?
-    -- freeHaskellFunPtr cb 
-    putStrLn "Pipe: closed"
-    return ()
+    c_stopPipe
+    freeHaskellFunPtr cb

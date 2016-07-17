@@ -17,6 +17,7 @@ static pthread_t profilerPid;
 static StgBool inited = 0;
 static haskellCallback callback = NULL;
 static StgWord64 bufferSize = 0;
+static StgBool terminate = 0;
 
 static void *profilerReaderThread(void *params);
 
@@ -31,6 +32,7 @@ void startProfilerPipe(char *pipeName, StgWord64 bs, haskellCallback cb)
 
         callback = cb;
         bufferSize = bs;
+        terminate = 0;
         if (pthread_create(&profilerPid, NULL, profilerReaderThread, (void*)pipeName)) {
             fprintf(stderr, "Pipe: Error creating profiler client thread\n");
         }
@@ -41,7 +43,7 @@ void startProfilerPipe(char *pipeName, StgWord64 bs, haskellCallback cb)
 void stopProfilerPipe(void) 
 {
     if (inited) {
-        pthread_cancel(profilerPid);
+        terminate = 1;
         if(pthread_join(profilerPid, NULL)) {
             fprintf(stderr, "Error terminating profiler thread \n");
         }
@@ -84,7 +86,7 @@ void *profilerReaderThread(void *params)
         if (readCount > 0 && callback != NULL) {
             callback(buf, readCount);
         }
-    } while(readCount > 0);
+    } while(readCount > 0 && terminate == 0);
 
     pthread_cleanup_pop(1);
     pthread_cleanup_pop(1);

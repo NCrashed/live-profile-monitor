@@ -62,7 +62,7 @@ library
 executable hs-live-profile
   hs-source-dirs: app 
   main-is: Main.hs
-  ghc-options: -threaded
+  ghc-options: -threaded -g
   -- other-modules:
   build-depends:       
       base >= 4.7 && < 5
