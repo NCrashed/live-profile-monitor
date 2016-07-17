@@ -10,12 +10,17 @@
 #include <fcntl.h>
 #include <errno.h>
 
+// Haskell callback that we call when some data from pipe is read
+typedef void (*haskellCallback)(unsigned char *, int);
+
 static pthread_t profilerPid;
 static StgBool inited = 0;
+static haskellCallback callback = NULL;
+static StgWord64 bufferSize = 0;
 
 static void *profilerReaderThread(void *params);
 
-void startClientProfiler(char *pipeName, StgWord64 bufferSize, StgBool disableFile) 
+void startProfilerPipe(char *pipeName, StgWord64 bs, haskellCallback cb) 
 {
     if (!inited) {
         if( access( pipeName, F_OK ) == -1 ) {
@@ -24,6 +29,8 @@ void startClientProfiler(char *pipeName, StgWord64 bufferSize, StgBool disableFi
             mkfifo(pipeName, 0600);
         }
 
+        callback = cb;
+        bufferSize = bs;
         if (pthread_create(&profilerPid, NULL, profilerReaderThread, (void*)pipeName)) {
             fprintf(stderr, "Error creating profiler client thread\n");
         }
@@ -31,7 +38,7 @@ void startClientProfiler(char *pipeName, StgWord64 bufferSize, StgBool disableFi
     }
 }
 
-void stopClientProfiler() 
+void stopProfilerPipe() 
 {
     if (inited) {
         pthread_cancel(profilerPid);
@@ -42,19 +49,25 @@ void stopClientProfiler()
     }
 }
 
-void closeEventPipe(void *pipe) {
+static void closeEventPipe(void *pipe) {
     fprintf(stdout, "Closing events pipe\n");
     int fd = *(int*)pipe;
     close(fd);
 }
 
+static void cleanReaderBuffer(void *buff) {
+    free(buff);
+}
 
 void *profilerReaderThread(void *params) 
 {
     char *pipeName;
     int fd;
-    char buf[2 * 1024 * 1024];
+    unsigned char *buf;
     int readCount;
+
+    buf = malloc(bufferSize);
+    pthread_cleanup_push(cleanReaderBuffer, (void *)buf);
 
     fprintf(stdout, "Opening the pipe for reading\n");
     pipeName = (char *)params;
@@ -68,9 +81,12 @@ void *profilerReaderThread(void *params)
     fprintf(stdout, "Started reading cycle\n");
     do {
         readCount = read(fd, buf, sizeof(buf));
-        fprintf(stdout, "Read from pipe %i\n", readCount);
+        if (readCount > 0 && callback != NULL) {
+            callback(buf, readCount);
+        }
     } while(readCount > 0);
 
+    pthread_cleanup_pop(1);
     pthread_cleanup_pop(1);
     return NULL;
 }

@@ -19,6 +19,7 @@ library
     Profile.Live.Hidden
     Profile.Live.Options 
     Profile.Live.Parser 
+    Profile.Live.Pipe
     Profile.Live.Server
     Profile.Live.Server.Collector
     Profile.Live.Server.Message
@@ -26,7 +27,7 @@ library
     Profile.Live.State
     Profile.Live.Termination
   c-sources:
-    cbits/profiler_client.c 
+    cbits/pipe.c 
 
   build-depends:       
       base >= 4.7 && < 5
