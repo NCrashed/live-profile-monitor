@@ -44,6 +44,6 @@ stack --compiler=ghc-8.1 install
 
 * Test:
 ```
-stack build --test --compiler=ghc-8.1
+stack build --test --compiler=ghc-8.1 --no-run-tests
 stack test live-profile-monitor:test-monitor --compiler=ghc-8.1
 ```
