@@ -60,12 +60,12 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> IORef Bool -- ^ Holds flag whether the monitor is paused
   -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
   -> EventChan -- ^ Channel for events (input)
+  -> IORef EventlogState -- ^ Ref with relevant state of eventlog
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventChan = forkIO $ do 
+startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventChan stateRef = forkIO $ do 
   labelCurrentThread "Server"
   logProf logger "Server thread started"
-  stateRef <- newIORef newEventlogState
-  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s stateRef
+  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s
   logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
@@ -76,8 +76,8 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
     logProf logger "Server started to listen"
     m s
 
-  acceptAndHandle :: ServerSocket -> IORef EventlogState -> IO ()
-  acceptAndHandle s stateRef = forever $ do  
+  acceptAndHandle :: ServerSocket -> IO ()
+  acceptAndHandle s = forever $ do  
     res <- accept s
     uncurry acceptCon res
     where 
@@ -181,7 +181,7 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
           CollectorEvents es -> do
             mapM_ clientOnEvent es
           CollectorState s -> clientOnState s 
-          
+
         collector' `deepseq` go collector'
 
 
@@ -211,7 +211,6 @@ runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateR
     case me of 
       Nothing -> return ()
       Just e -> do
-        atomicModifyIORef' stateRef $ \state -> (updateEventlogState e state, ())
         paused <- readIORef pausedRef 
         splitter' <- if (paused == oldPaused) -- After pause everything might be different
           then return splitter

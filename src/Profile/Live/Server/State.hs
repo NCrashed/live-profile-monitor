@@ -20,10 +20,11 @@ module Profile.Live.Server.State(
   ) where 
 
 import Control.DeepSeq 
-import Data.Binary.Serialise.CBOR 
+import Data.Binary.Serialise.CBOR
 import GHC.Generics 
 import GHC.RTS.Events 
-import Profile.Live.Server.State.Thread 
+
+import Profile.Live.Server.State.Thread
 
 -- | Storage of all state of eventlog protocol.
 --

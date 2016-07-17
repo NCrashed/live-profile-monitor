@@ -41,12 +41,12 @@ initLiveProfile opts eventLogger = liftIO $ do
   eventTypeChan <- newTBMChanIO maxSize
   eventChan <- newTBMChanIO maxSize
   eventLogPipeThreadTerm <- newEmptyMVar
-  eventLogPipeThread <- redirectEventlog eventLogger opts (eventLogTerminate, eventLogPipeThreadTerm)
+  (eventLogPipeThread, stateRef) <- redirectEventlog eventLogger opts (eventLogTerminate, eventLogPipeThreadTerm)
     eventTypeChan eventChan
 
   eventLogServerThreadTerm <- newEmptyMVar
   eventLogServerThread <- startLiveServer eventLogger opts (eventLogTerminate, eventLogServerThreadTerm)
-    eventLogPause eventTypeChan eventChan
+    eventLogPause eventTypeChan eventChan stateRef
   return LiveProfiler {..}
 
 -- | Destroy live profiler.
