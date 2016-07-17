@@ -4,10 +4,12 @@ module Profile.Live.Pipe(
   ) where 
 
 import Control.Monad.IO.Class 
-import Foreign 
+import Foreign hiding (void)
 import Foreign.C 
 
 import qualified Data.ByteString as BS
+
+import Control.Concurrent (forkIO)
 
 -- | Pipe OS thread configuration
 data PipeOptions = PipeOptions {
@@ -37,6 +39,8 @@ startPipe PipeOptions{..} = liftIO $ withCString pipeName $ \pn -> do
     bs <- BS.packCStringLen (castPtr ptr, fromIntegral i)
     pipeCallback bs 
   c_startPipe pn pipeBufferSize cb
-  return $ do 
-    c_stopPipe
-    freeHaskellFunPtr cb 
+  return $ do
+    -- c_stopPipe -- TODO: why this function cause not resuming to execution?
+    -- freeHaskellFunPtr cb 
+    putStrLn "Pipe: closed"
+    return ()

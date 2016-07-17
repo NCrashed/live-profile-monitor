@@ -35,11 +35,13 @@ void startLeech(char *pName, StgWord64 bufferSize, StgBool disableFile)
     if (!inited) {
         pipeName = strdup(pName);
 
-        if( access( pipeName, F_OK ) == -1 ) {
-            fprintf(stdout, "Leech: Creating events pipe\n");
+        if( access( pipeName, F_OK ) > 0 ) {
+            fprintf(stdout, "Leech: delete old pipe\n");
             unlink(pipeName);
-            mkfifo(pipeName, 0600);
+            system("rm pipeName");
         }
+        fprintf(stdout, "Leech: Creating events pipe\n");
+        mkfifo(pipeName, 0600);
 
         oldBufferSize = rts_getEventLogBuffersSize();
         rts_resizeEventLog(bufferSize);
@@ -57,7 +59,7 @@ void startLeech(char *pName, StgWord64 bufferSize, StgBool disableFile)
     }
 }
 
-void stopLeech() 
+void stopLeech(void) 
 {
     if (inited) {
         pthread_cancel(leechPid);
@@ -99,8 +101,6 @@ void *leechThread(void *params)
     for(;;) {
         len = rts_getEventLogChunk(&data);
         if (len != 0) {
-            fprintf(stdout, "Leech: Got eventlog chunk! %i\n", len);
-
             StgWord64 writen = 0;
             do {
                 writen = write(fd, data, len);

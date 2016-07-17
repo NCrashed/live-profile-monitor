@@ -39,7 +39,7 @@ defaultLiveProfileOpts = LiveProfileOpts {
     eventLogChunkSize = 1024 -- 1 Kb
   , eventLogPipeName = "events.pipe"
   , eventLogListenPort = 8242
-  , eventChannelMaximumSize = Just 1000000
+  , eventChannelMaximumSize = Nothing
   , eventMessageMaxSize = Nothing
   , eventHideMonitorActivity = False
   }

@@ -79,7 +79,7 @@ startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan hidden
     m s
 
   acceptAndHandle :: ServerSocket -> IORef HiddenThreadSet -> IO ()
-  acceptAndHandle s hiddenRef = do  
+  acceptAndHandle s hiddenRef = forever $ do  
     res <- accept s
     uncurry acceptCon res
     where 
@@ -168,7 +168,8 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
           CollectorService smsg -> do 
             logProf logger $ "Got service message" <> showl smsg
             clientOnService smsg
-          CollectorEvents es -> mapM_ clientOnEvent es
+          CollectorEvents es -> do
+            mapM_ clientOnEvent es
         collector' `deepseq` go collector'
 
 

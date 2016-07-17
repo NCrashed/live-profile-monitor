@@ -19,12 +19,20 @@ import qualified Data.ByteString.Unsafe as B
 import Profile.Live.Options 
 import Profile.Live.State 
 import Profile.Live.Termination
+import Profile.Live.Pipe 
 
 -- | Initialise link with C world that pipes data from FIFO file (or named pipe on Windows)
-initMemoryPipe :: LoggerSet -- ^ Monitor logger
+initMemoryPipe :: FilePath -- ^ Pipe name
   -> Word64 -- ^ Chunk size
-  -> IO (TChan B.ByteString)
-initMemoryPipe _ _ = newTChanIO 
+  -> IO (TChan B.ByteString, IO ())
+initMemoryPipe pipeName buffSize = do 
+  chan <- newTChanIO 
+  stopPipe <- startPipe PipeOptions {
+      pipeName = pipeName
+    , pipeBufferSize = buffSize
+    , pipeCallback = atomically . writeTChan chan 
+    }
+  return (chan, stopPipe)
 
 -- | Creates thread that pipes eventlog from memory into incremental parser
 redirectEventlog :: LoggerSet -- ^ Monitor logger
@@ -37,8 +45,8 @@ redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
   forkIO . void $ do 
     labelCurrentThread "Parser"
     logProf logger "Parser thread started"
-    pipe <- initMemoryPipe logger eventLogChunkSize
-    untilTerminatedPair term $ go pipe newParserState
+    bracket (initMemoryPipe eventLogPipeName eventLogChunkSize) snd $ \(pipe, _) -> do
+      untilTerminatedPair term $ go pipe newParserState
     logProf logger "Parser thread terminated"
   where 
   go !pipe !parserState = do 
@@ -46,7 +54,7 @@ redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
     let parserState' = pushBytes parserState datum
         (res, parserState'') = readEvent parserState'
     case res of 
-      Item e -> do 
+      Item e -> do
         mhmsg <- atomically $ do 
           closed <- isClosedTBMChan eventTypeChan
           if not closed then do

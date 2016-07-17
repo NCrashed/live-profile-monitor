@@ -24,7 +24,7 @@ void startProfilerPipe(char *pipeName, StgWord64 bs, haskellCallback cb)
 {
     if (!inited) {
         if( access( pipeName, F_OK ) == -1 ) {
-            fprintf(stdout, "Creating events pipe\n");
+            fprintf(stdout, "Pipe: Creating events pipe\n");
             unlink(pipeName);
             mkfifo(pipeName, 0600);
         }
@@ -32,13 +32,13 @@ void startProfilerPipe(char *pipeName, StgWord64 bs, haskellCallback cb)
         callback = cb;
         bufferSize = bs;
         if (pthread_create(&profilerPid, NULL, profilerReaderThread, (void*)pipeName)) {
-            fprintf(stderr, "Error creating profiler client thread\n");
+            fprintf(stderr, "Pipe: Error creating profiler client thread\n");
         }
         inited = 1;
     }
 }
 
-void stopProfilerPipe() 
+void stopProfilerPipe(void) 
 {
     if (inited) {
         pthread_cancel(profilerPid);
@@ -50,7 +50,7 @@ void stopProfilerPipe()
 }
 
 static void closeEventPipe(void *pipe) {
-    fprintf(stdout, "Closing events pipe\n");
+    fprintf(stdout, "Pipe: Closing events pipe\n");
     int fd = *(int*)pipe;
     close(fd);
 }
@@ -69,16 +69,16 @@ void *profilerReaderThread(void *params)
     buf = malloc(bufferSize);
     pthread_cleanup_push(cleanReaderBuffer, (void *)buf);
 
-    fprintf(stdout, "Opening the pipe for reading\n");
+    fprintf(stdout, "Pipe: Opening the pipe for reading\n");
     pipeName = (char *)params;
     fd = open(pipeName, O_RDONLY);
     if (fd < 0) {
-        fprintf(stderr, "Error opening profiler pipe: %s\n", strerror(errno));
+        fprintf(stderr, "Pipe: Error opening profiler pipe: %s\n", strerror(errno));
         return NULL;
     }
     pthread_cleanup_push(closeEventPipe, (void *)&fd);
 
-    fprintf(stdout, "Started reading cycle\n");
+    fprintf(stdout, "Pipe: Started reading cycle\n");
     do {
         readCount = read(fd, buf, sizeof(buf));
         if (readCount > 0 && callback != NULL) {

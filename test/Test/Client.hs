@@ -39,14 +39,14 @@ receiveRemoteEventlog term filename = do
 
   writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
   writeLogFile term chan = withFile filename WriteMode $ \h -> 
-    onExit (finishLog h) $ untilTerminated term $ do 
+    onExit (finishLog h) $ untilTerminated term $ forever $ do 
       mres <- atomically $ readTChan chan
       case mres of 
         Left hdr -> do 
           BS.hPut h . BSL.toStrict . runPut $ do
            putHeader hdr
            putDataBeginMarker
-        Right e -> do 
+        Right e -> do
           BS.hPut h . BSL.toStrict . runPut $ putEvent e
       hFlush h 
     where 
