@@ -14,30 +14,32 @@ import System.Log.FastLogger
 import Profile.Live.Options 
 import Profile.Live.Server
 import Profile.Live.State 
+import Profile.Live.Termination
 
 import qualified Data.ByteString as BS 
 import qualified Data.ByteString.Lazy as BSL
 
-receiveRemoteEventlog :: FilePath -> IO ()
-receiveRemoteEventlog filename = void . forkIO $ do 
-  logger <- newStdoutLoggerSet defaultBufSize
-  term <- newEmptyMVar
+receiveRemoteEventlog :: Termination -> FilePath -> IO Termination
+receiveRemoteEventlog term filename = do
   serverTerm <- newEmptyMVar
+  _ <- forkIO $ do 
+    logger <- newStdoutLoggerSet defaultBufSize
+    fileChan <- newTChanIO 
+    let opts = defaultLiveProfileClientOpts
+        behavior = defaultClientBehavior {
+            clientOnHeader = atomically . writeTChan fileChan . Left
+          , clientOnEvent = atomically . writeTChan fileChan . Right
+          }
 
-  fileChan <- newTChanIO 
-  let opts = defaultLiveProfileClientOpts
-      behavior = defaultClientBehavior {
-          clientOnHeader = atomically . writeTChan fileChan . Left
-        , clientOnEvent = atomically . writeTChan fileChan . Right
-        }
-
-  _ <- startLiveClient logger opts term serverTerm behavior
-  writeLogFile serverTerm fileChan
+    cid <- startLiveClient logger opts (term, serverTerm) behavior
+    writeLogFile term fileChan
+    terminate serverTerm
+  return serverTerm
   where
 
   writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
   writeLogFile term chan = withFile filename WriteMode $ \h -> 
-    onExit (finishLog h) $ untilTerminated term () $ const $ do 
+    onExit (finishLog h) $ untilTerminated term $ do 
       mres <- atomically $ readTChan chan
       case mres of 
         Left hdr -> do 

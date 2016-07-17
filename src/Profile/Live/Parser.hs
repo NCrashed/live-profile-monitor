@@ -18,31 +18,30 @@ import qualified Data.ByteString.Unsafe as B
 
 import Profile.Live.Options 
 import Profile.Live.State 
+import Profile.Live.Termination
 
 -- | Initialise link with C world that pipes data from FIFO file (or named pipe on Windows)
 initMemoryPipe :: LoggerSet -- ^ Monitor logger
   -> Word64 -- ^ Chunk size
   -> IO (TChan B.ByteString)
-initMemoryPipe = error "initMemoryPipe unimplemented"
+initMemoryPipe _ _ = newTChanIO 
 
 -- | Creates thread that pipes eventlog from memory into incremental parser
 redirectEventlog :: LoggerSet -- ^ Monitor logger
   -> LiveProfileOpts -- ^ Options of the monitor
-  -> Termination -- ^ When set we need to terminate self
-  -> Termination -- ^ When terminates we need to set this
+  -> TerminationPair -- ^ Termination protocol
   -> EventTypeChan -- ^ Channel for event types, closed as soon as first event occured
   -> EventChan -- ^ Channel for events
   -> IO ThreadId -- ^ Forks new thread with incremental parser
-redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan eventChan = do
+redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
   forkIO . void $ do 
     labelCurrentThread "Parser"
     logProf logger "Parser thread started"
     pipe <- initMemoryPipe logger eventLogChunkSize
-    untilTerminated termVar newParserState $ go pipe
-    putMVar thisTerm ()
+    untilTerminatedPair term $ go pipe newParserState
     logProf logger "Parser thread terminated"
   where 
-  go pipe parserState = do 
+  go !pipe !parserState = do 
     datum <- atomically $ readTChan pipe 
     let parserState' = pushBytes parserState datum
         (res, parserState'') = readEvent parserState'
@@ -62,7 +61,7 @@ redirectEventlog logger LiveProfileOpts{..} termVar thisTerm eventTypeChan event
       Incomplete -> return ()
       Complete -> return ()
       ParseError er -> logProf logger $ "parserThread error: " <> toLogStr er
-    return parserState''
+    go pipe parserState''
 
   putHeader :: EventParserState -> STM (Maybe LogStr)
   putHeader parserState = case readHeader parserState of 

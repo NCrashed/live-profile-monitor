@@ -15,6 +15,7 @@ import Control.Exception
 import Control.Monad 
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict (runWriter)
+import Control.Monad.Except 
 import Data.Binary.Serialise.CBOR
 import Data.IORef 
 import Data.Maybe
@@ -24,6 +25,7 @@ import Data.Word
 import Foreign hiding (void)
 import Foreign.C.Types 
 import GHC.RTS.Events hiding (ThreadId)
+import GHC.Generics
 
 import Profile.Live.Options 
 import Profile.Live.State 
@@ -38,10 +40,14 @@ import Profile.Live.Hidden
 import Profile.Live.Server.Collector
 import Profile.Live.Server.Message 
 import Profile.Live.Server.Splitter
+import Profile.Live.Termination 
 
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS 
 import qualified Data.ByteString.Unsafe as BS 
 import qualified Data.Sequence as S 
+
+import Debug.Trace 
 
 -- | Socket type that is used for the server
 type ServerSocket = Socket Inet6 Stream TCP
@@ -50,20 +56,18 @@ type ServerSocket = Socket Inet6 Stream TCP
 -- clients connect with. 
 startLiveServer :: LoggerSet -- ^ Monitor logger
   -> LiveProfileOpts -- ^ Options of the monitor
-  -> Termination  -- ^ When set we need to terminate self
-  -> Termination  -- ^ When terminates we need to set this  
+  -> TerminationPair  -- ^ Termination protocol
   -> IORef Bool -- ^ Holds flag whether the monitor is paused
   -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
   -> EventChan -- ^ Channel for events (input)
   -> HiddenThreadSet -- ^ Which threads should be hidden from the remote client
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan eventChan hiddenSet = forkIO $ do 
+startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan hiddenSet = forkIO $ do 
   labelCurrentThread "Server"
   logProf logger "Server thread started"
   hiddenRef <- newIORef hiddenSet
   when eventHideMonitorActivity $ atomicHideCurrentThread hiddenRef
-  withSocket $ \s -> untilTerminated termVar () $ const $ acceptAndHandle s hiddenRef
-  putMVar thisTerm ()
+  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s hiddenRef
   logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
@@ -76,8 +80,8 @@ startLiveServer logger LiveProfileOpts{..} termVar thisTerm _ eventTypeChan even
 
   acceptAndHandle :: ServerSocket -> IORef HiddenThreadSet -> IO ()
   acceptAndHandle s hiddenRef = do  
-    mres <- timeout 1000000 $ accept s
-    whenJust mres $ uncurry acceptCon
+    res <- accept s
+    uncurry acceptCon res
     where 
     closeOnExit p addr = bracket (return p) (\p' -> closeCon p' addr) . const 
     closeCon p addr = do 
@@ -114,13 +118,14 @@ defaultClientBehavior = ClientBehavior {
 -- | Connect to remote app and recieve eventlog from it.
 startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
   -> LiveProfileClientOpts -- ^ Options for client side
-  -> Termination  -- ^ When set we need to terminate self
-  -> Termination  -- ^ When terminates we need to set this  
+  -> TerminationPair  -- ^ Termination protocol
   -> ClientBehavior -- ^ User specified callbacks 
   -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
-startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm cb = forkIO $ do 
+startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ do 
   labelCurrentThread "Client"
-  bracket socket clientClose $ \s -> connect s clientTargetAddr >> clientBody s
+  untilTerminatedPair term $ bracket socket clientClose $ \s -> do
+    connect s clientTargetAddr
+    clientBody s
   logProf logger "Client thread terminated"
   where
   clientClose s = do 
@@ -128,14 +133,9 @@ startLiveClient logger LiveProfileClientOpts{..} termVar thisTerm cb = forkIO $ 
     close s 
   clientBody s = do 
     logProf logger $ "Client thread started and connected to " <> showl clientTargetAddr
-    _ <- listenThread s
-    --_ <- senderThread s
-    untilTerminated termVar () $ const yield
-    putMVar thisTerm ()
-
-  listenThread s = forkIO $ do
-    labelCurrentThread "Client_listener"
     runEventListener logger s clientMessageTimeout cb
+    --_ <- senderThread s
+
   --senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
@@ -149,7 +149,10 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
   go collector = do 
     mmsg <- recieveMessage p
     case mmsg of 
-      Left er -> do
+      Left MsgEndOfInput -> do 
+        logProf logger "runEventListener: end of input"
+        return ()
+      Left (MsgDeserialisationFail er) -> do
         logProf logger er
         go collector
       Right msg -> do 
@@ -202,16 +205,27 @@ runEventSender logger p maxSize eventTypeChan eventChan hiddenRef = goHeader S.e
           splitter' `deepseq` goMain splitter'
         else goMain splitter
 
+-- | Special type of errors that 'recieveMessage' can produce
+data ReceiveMsgError = 
+    MsgDeserialisationFail !LogStr
+  | MsgEndOfInput
+  deriving (Generic)
+
 -- | Helper to read next message from the socket
-recieveMessage :: ServerSocket -> IO (Either LogStr ProfileMsg)
-recieveMessage p = do 
-  lbytes <- receive p 4 (msgWaitAll <> msgNoSignal)
-  (l :: Word32) <- BS.unsafeUseAsCString lbytes $ peekBE . castPtr
-  msgbytes <- receive p (fromIntegral l) (msgWaitAll <> msgNoSignal)
+recieveMessage :: ServerSocket -> IO (Either ReceiveMsgError ProfileMsg)
+recieveMessage p = runExceptT $ do 
+  lbytes <- liftIO $ receive p 4 (msgWaitAll <> msgNoSignal)
+  guardEndOfInput lbytes 
+  (l :: Word32) <- liftIO $ BS.unsafeUseAsCString lbytes $ peekBE . castPtr
+  msgbytes <- liftIO $ receive p (fromIntegral l) (msgWaitAll <> msgNoSignal)
+  guardEndOfInput msgbytes 
   case deserialiseOrFail $ BS.fromStrict msgbytes of 
-    Left er -> return . Left $ "Failed to deserialize message: " <> showl er 
-        <> ", payload: " <> showl msgbytes
-    Right msg -> return . Right $ msg 
+    Left er -> throwError . MsgDeserialisationFail $ "Failed to deserialize message: " 
+        <> showl er <> ", payload: " <> showl msgbytes
+    Right msg -> return msg 
+  where 
+  guardEndOfInput bs | B.null bs = throwError MsgEndOfInput
+                     | otherwise = return ()
 
 -- | Helper to write message into socket
 sendMessage :: ServerSocket -> ProfileMsg -> IO ()

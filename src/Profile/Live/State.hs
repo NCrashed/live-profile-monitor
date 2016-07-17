@@ -1,10 +1,8 @@
 module Profile.Live.State(
-    Termination
-  , EventTypeChan
+    EventTypeChan
   , EventChan
   , LiveProfiler(..)
   -- * Helpers
-  , untilTerminated
   , whenJust
   , logProf
   , logProf'
@@ -26,8 +24,7 @@ import GHC.Conc.Sync (labelThread)
 import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
 
--- | Termination mutex, all threads are stopped when the mvar is filled
-type Termination = MVar ()
+import Profile.Live.Termination
 
 -- | Channel for eventlog header, closeable and bounded in length
 type EventTypeChan = TBMChan EventType 
@@ -63,16 +60,6 @@ data LiveProfiler = LiveProfiler {
   -- will spam into logger about the accident.
 , eventChan :: !EventChan
 }
-
--- | Do action until the mvar is not filled
-untilTerminated :: Termination -> a -> (a -> IO a) -> IO ()
-untilTerminated termVar a m = do 
-  res <- tryReadMVar termVar
-  case res of 
-    Nothing -> do
-      a' <- m a
-      untilTerminated termVar a' m
-    Just _ -> return ()
 
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust Nothing _ = pure ()

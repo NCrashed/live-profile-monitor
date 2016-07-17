@@ -20,10 +20,11 @@ library
     Profile.Live.Options 
     Profile.Live.Parser 
     Profile.Live.Server
-    Profile.Live.Server.Message
     Profile.Live.Server.Collector
+    Profile.Live.Server.Message
     Profile.Live.Server.Splitter
     Profile.Live.State
+    Profile.Live.Termination
   c-sources:
     cbits/profiler_client.c 
 
@@ -49,16 +50,19 @@ library
     , unordered-containers >= 0.2.7
   default-language:    Haskell2010
   default-extensions:
+    BangPatterns
+    DeriveGeneric
+    FlexibleContexts
+    OverloadedStrings
     RecordWildCards
     ScopedTypeVariables
-    OverloadedStrings
-    BangPatterns
   extra-libraries:
     pthread
 
 executable hs-live-profile
   hs-source-dirs: app 
   main-is: Main.hs
+  ghc-options: -threaded
   -- other-modules:
   build-depends:       
       base >= 4.7 && < 5

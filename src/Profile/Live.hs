@@ -30,6 +30,7 @@ import Profile.Live.Options
 import Profile.Live.Parser 
 import Profile.Live.Server
 import Profile.Live.State 
+import Profile.Live.Termination 
 
 -- | Initialize live profile monitor that accepts connections
 -- from remote tools and tracks state of eventlog protocol.
@@ -41,14 +42,14 @@ initLiveProfile opts eventLogger = liftIO $ do
   eventTypeChan <- newTBMChanIO maxSize
   eventChan <- newTBMChanIO maxSize
   eventLogPipeThreadTerm <- newEmptyMVar
-  eventLogPipeThread <- redirectEventlog eventLogger opts eventLogTerminate eventLogPipeThreadTerm 
+  eventLogPipeThread <- redirectEventlog eventLogger opts (eventLogTerminate, eventLogPipeThreadTerm)
     eventTypeChan eventChan
 
   let hiddenSet = if eventHideMonitorActivity opts
         then eventLogPipeThread `addToHiddenSet` emptyHiddenSet
         else emptyHiddenSet
   eventLogServerThreadTerm <- newEmptyMVar
-  eventLogServerThread <- startLiveServer eventLogger opts eventLogTerminate eventLogServerThreadTerm 
+  eventLogServerThread <- startLiveServer eventLogger opts (eventLogTerminate, eventLogServerThreadTerm)
     eventLogPause eventTypeChan eventChan hiddenSet
   return LiveProfiler {..}
 

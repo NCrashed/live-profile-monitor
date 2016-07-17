@@ -18,11 +18,15 @@ main :: IO ()
 main = do 
   runEventlogSerialisationTests
 
-  ph <- spawnCommand "hs-live-profile ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech"
+  ph <- spawnCommand "hs-live-profile --RTS ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech +RTS -lm -N4"
 
   threadDelay 1000000
   flag <- doesFileExist "test.eventlog"
   when flag $ removeFile "test.eventlog"
-  receiveRemoteEventlog "test.eventlog"
+
+  term <- newEmptyMVar
+  clientTerm <- receiveRemoteEventlog term "test.eventlog"
 
   print =<< waitForProcess ph
+  putMVar term ()
+  takeMVar clientTerm
