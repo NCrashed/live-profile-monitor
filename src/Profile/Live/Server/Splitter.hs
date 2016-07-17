@@ -11,10 +11,13 @@ import Control.DeepSeq
 import Control.Monad
 import Control.Monad.State.Class
 import Data.Binary.Put
+import Data.Binary.Serialise.CBOR 
+import Data.Word 
 import GHC.Generics 
 import GHC.RTS.Events
+
 import Profile.Live.Server.Message
-import Data.Word 
+import Profile.Live.Server.State 
 
 import qualified Data.Sequence as S 
 import qualified Data.ByteString.Lazy as BSL
@@ -52,9 +55,12 @@ mkHeaderMsgs ets = header S.<| msgs
 
 -- | Generator of protocol messages from GHC events
 stepSplitter :: (MonadState SplitterState m)
-  => Event 
-  -> m (S.Seq EventMsg)
-stepSplitter ev@Event{..} = do
+  => (Either EventlogState Event)
+  -> m (S.Seq ProfileMsg)
+stepSplitter (Left st) = do 
+  msgs <- makePartial $ serialise st
+  return $ ProfileState <$> msgs
+stepSplitter (Right ev@Event{..}) = do
   SplitterState{..} <- get  
   case evSpec of 
     EventBlock{..} -> do 
@@ -62,32 +68,31 @@ stepSplitter ev@Event{..} = do
           splitterCurrentBlock = Just (splitterNextBlockId, block_size)
         , splitterNextBlockId = splitterNextBlockId + 1
         }
-      return . S.singleton . EventBlockMsg . EventBlockMsgHeader $ EventBlockMsgData {
+      return . S.singleton . ProfileEvent . EventBlockMsg . EventBlockMsgHeader $ EventBlockMsgData {
           eblockMsgDataId = splitterNextBlockId
         , eblockMsgDataBeginTimestamp = evTime
         , eblockMsgDataEndTimestamp = end_time
         , eblockMsgDataCap = capFromGhcEvents cap 
         , eblockMsgDataEventsCount = block_size
         }
-    _ -> case splitterCurrentBlock of 
-      Nothing -> do
-        msgs <- makePartial ev
-        return $ EventMsg <$> msgs
-      Just (_, curBlockSize) -> do 
-        msgs <- makePartial ev 
-        when (curBlockSize <= 1) $ modify' $ \ss -> ss {
-            splitterCurrentBlock = Nothing
-          }
-        return $ EventMsg <$> msgs
+    _ -> do
+      let payload = runPut (putEvent ev)
+      msgs <- makePartial payload
+      case splitterCurrentBlock of 
+        Nothing -> return $ ProfileEvent . EventMsg <$> msgs
+        Just (_, curBlockSize) -> do 
+          when (curBlockSize <= 1) $ modify' $ \ss -> ss {
+              splitterCurrentBlock = Nothing
+            }
+          return $ ProfileEvent . EventMsg <$> msgs
 
 -- | Make sequence of network messages from given event, and the event payload
 -- is splitted by max datagram size
 makePartial :: (MonadState SplitterState m)
-  => Event 
+  => BSL.ByteString 
   -> m (S.Seq EventMsgPartial)
-makePartial ev = do 
-  SplitterState{..} <- get 
-  let payload = runPut (putEvent ev)
+makePartial payload = do 
+  SplitterState{..} <- get
   if fromIntegral (BSL.length payload) > splitterDatagramSize
     then do 
       modify' $ \ss -> ss {

@@ -29,6 +29,7 @@ receiveRemoteEventlog term filename = do
         behavior = defaultClientBehavior {
             clientOnHeader = atomically . writeTChan fileChan . Left
           , clientOnEvent = atomically . writeTChan fileChan . Right
+          , clientOnState = print 
           }
 
     cid <- startLiveClient logger opts (term, serverTerm) behavior

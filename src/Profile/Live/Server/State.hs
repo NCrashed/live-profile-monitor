@@ -33,7 +33,7 @@ data EventlogState = EventlogState {
     eventlogThreads :: !ThreadsState 
     -- | If 'Just' the GC is performed and the value contains time of GC begin
   , eventlogGC :: !(Maybe Timestamp)
-  } deriving (Generic)
+  } deriving (Generic, Show)
 
 instance NFData EventlogState
 instance Serialise EventlogState
@@ -75,3 +75,4 @@ isGCEvent e = case evSpec e of
   EndGC {} -> True
   GlobalSyncGC {} -> True
   GCStatsGHC {} -> True
+  _ -> False

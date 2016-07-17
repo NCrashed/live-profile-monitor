@@ -11,22 +11,25 @@ import Control.DeepSeq
 import Control.Monad 
 import Control.Monad.State.Class
 import Control.Monad.Writer.Class
+import Data.Binary.Serialise.CBOR 
 import Data.Maybe
 import Data.Monoid
+import Data.Ord 
 import Data.Time 
 import Data.Word 
+import GHC.Generics 
 import GHC.RTS.Events
 import GHC.RTS.EventsIncremental
 import System.Log.FastLogger
-import GHC.Generics 
-import Data.Ord 
 
 import qualified Data.ByteString as BS 
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Foldable as F 
 import qualified Data.HashMap.Strict as H
 import qualified Data.Sequence as S 
 
 import Profile.Live.Server.Message
+import Profile.Live.Server.State 
 import Profile.Live.State 
 
 -- | State of message decoder, helps to collect partial and blocked messages into
@@ -113,6 +116,7 @@ data CollectorOutput =
     CollectorHeader !Header 
   | CollectorService !ServiceMsg 
   | CollectorEvents !(S.Seq Event)
+  | CollectorState !EventlogState
   deriving (Show, Generic)
 
 -- | Perform one step of converting the profiler protocol into events
@@ -143,6 +147,15 @@ stepMessageCollector curTime  msg = do
           Just header <- gets collectorCachedHeader
           return $ CollectorHeader header S.<| S.singleton eventRes
         else return $ S.singleton eventRes
+    ProfileState payload -> do 
+      mbs <- collectorPartial curTime payload
+      maybe (return S.empty) deserialiseState mbs 
+      where 
+      deserialiseState bs = case deserialiseOrFail $ BSL.fromStrict bs of 
+        Left er -> do 
+          tell $ "Live profiler: Failed to deserialise state: " <> showl er <> "\n"
+          return S.empty 
+        Right s -> return . S.singleton . CollectorState $ s 
 
 -- | First phase of the collector when we collect header
 stepHeaderCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
@@ -177,7 +190,7 @@ stepEventCollector :: (MonadState MessageCollector m, MonadWriter LogStr m)
 stepEventCollector curTime msg = case msg of
   EventBlockMsg bmsg -> collectorBlock bmsg 
   EventMsg pmsg -> do 
-    res <- collectorPartial pmsg 
+    res <- collectorPartial' pmsg 
     return $ case res of 
       Nothing -> Nothing 
       Just e -> Just $ S.singleton e 
@@ -198,7 +211,7 @@ stepEventCollector curTime msg = case msg of
       return Nothing
     EventBlockMsgPart {..} -> do 
       mc <- get 
-      mpayload <- collectorPartial eblockMsgPayload 
+      mpayload <- collectorPartial' eblockMsgPayload 
       case mpayload of 
         Nothing -> return Nothing -- The case when only part of a message arrived
         Just payload -> case eblockMsgId `H.lookup` collectorBlocks mc of 
@@ -236,66 +249,75 @@ stepEventCollector curTime msg = case msg of
   -- | Process partial messages and return collected results. 
   -- The main nuance is that header and events can arrive in 
   -- out of order, so need to handle this neatly.   
-  collectorPartial :: (MonadState MessageCollector m, MonadWriter LogStr m)
+  collectorPartial' :: (MonadState MessageCollector m, MonadWriter LogStr m)
     => EventMsgPartial -- ^ Message about event block
     -> m (Maybe Event)
-  collectorPartial pmsg = case pmsg of 
-    EventMsgFull payload -> withParsed payload $ return . Just 
-    EventMsgPartial header@EventPartialData{..} -> do 
-      mc@MessageCollector{..} <- get
-      put mc {
-          collectorPartials = case epartialMsgId `H.lookup` collectorPartials of 
-            Nothing -> H.insert epartialMsgId (curTime, Just header, S.empty) collectorPartials
-            Just _ -> collectorPartials
-        }
-      return Nothing 
-    EventMsgPart {..} -> do 
-      mc@MessageCollector{..} <- get
-      case epartMsgId `H.lookup` collectorPartials of 
-        Nothing -> do 
-          put mc {
-              collectorPartials = H.insert epartMsgId 
-                (curTime, Nothing, S.singleton (epartMsgNum, epartMsgPayload)) collectorPartials
-            }
+  collectorPartial' pmsg = do 
+    mbs <- collectorPartial curTime pmsg
+    maybe (return Nothing) (\bs -> withParsed bs $ return . Just) mbs
+    where 
+    -- We drop new parser state as we always 
+    -- feed enough data to get new event. Pure parser state cannot be stored as collector state
+    -- as the bits could arrive in out of order.
+    withParsed payload m = do 
+      parser <- gets collectorParser
+      let (res, parser') = readEvent $ pushBytes parser payload
+      case res of 
+        Incomplete -> do
+          modify' $ \mc -> mc { collectorParser = parser' }
           return Nothing
-        Just (t, Nothing, es) -> do 
+        Complete -> do
+          tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
+          return Nothing -- something went wrong.
+        ParseError s -> do
+          tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
+            <> ". Error: " <> toLogStr s <> "\n"
+          return Nothing  -- something went wrong. 
+        Item ev -> do 
+          modify' $ \mc -> mc { collectorParser = parser' }
+          m ev 
+
+-- | Generic collector of partial messages
+collectorPartial :: (MonadState MessageCollector m, MonadWriter LogStr m)
+  => UTCTime -- ^ Current time
+  -> EventMsgPartial -- ^ Message about event block
+  -> m (Maybe BS.ByteString)
+collectorPartial curTime pmsg = case pmsg of 
+  EventMsgFull payload -> return . Just $ payload 
+  EventMsgPartial header@EventPartialData{..} -> do 
+    mc@MessageCollector{..} <- get
+    put mc {
+        collectorPartials = case epartialMsgId `H.lookup` collectorPartials of 
+          Nothing -> H.insert epartialMsgId (curTime, Just header, S.empty) collectorPartials
+          Just _ -> collectorPartials
+      }
+    return Nothing 
+  EventMsgPart {..} -> do 
+    mc@MessageCollector{..} <- get
+    case epartMsgId `H.lookup` collectorPartials of 
+      Nothing -> do 
+        put mc {
+            collectorPartials = H.insert epartMsgId 
+              (curTime, Nothing, S.singleton (epartMsgNum, epartMsgPayload)) collectorPartials
+          }
+        return Nothing
+      Just (t, Nothing, es) -> do 
+        let es' = es S.|> (epartMsgNum, epartMsgPayload)
+        put mc {
+            collectorPartials = es' `seq` H.insert epartMsgId (t, Nothing, es') collectorPartials
+          }
+        return Nothing
+      Just (t, Just header, es) -> if fromIntegral (S.length es + 1) >= epartialMsgParts header
+        then do
+          put mc {
+              collectorPartials = H.delete epartMsgId collectorPartials
+            }
+          let es' = S.sortBy (comparing fst) $ es S.|> (epartMsgNum, epartMsgPayload)
+              payload = F.foldl' (\acc s -> acc <> s) BS.empty $ snd `fmap` es'
+          return . Just $ payload
+        else do 
           let es' = es S.|> (epartMsgNum, epartMsgPayload)
           put mc {
-              collectorPartials = es' `seq` H.insert epartMsgId (t, Nothing, es') collectorPartials
+              collectorPartials = es' `seq` H.insert epartMsgId (t, Just header, es') collectorPartials
             }
-          return Nothing
-        Just (t, Just header, es) -> if fromIntegral (S.length es + 1) >= epartialMsgParts header
-          then do
-            put mc {
-                collectorPartials = H.delete epartMsgId collectorPartials
-              }
-            let es' = S.sortBy (comparing fst) $ es S.|> (epartMsgNum, epartMsgPayload)
-                payload = F.foldl' (\acc s -> acc <> s) BS.empty $ snd `fmap` es'
-            withParsed payload $ return . Just
-          else do 
-            let es' = es S.|> (epartMsgNum, epartMsgPayload)
-            put mc {
-                collectorPartials = es' `seq` H.insert epartMsgId (t, Just header, es') collectorPartials
-              }
-            return Nothing            
-    where 
-      -- We drop new parser state as we always 
-      -- feed enough data to get new event. Pure parser state cannot be stored as collector state
-      -- as the bits could arrive in out of order.
-      withParsed payload m = do 
-        parser <- gets collectorParser
-        let (res, parser') = readEvent $ pushBytes parser payload
-        case res of 
-          Incomplete -> do
-            modify' $ \mc -> mc { collectorParser = parser' }
-            return Nothing
-          Complete -> do
-            tell $ "Live profiler: Received event, but the incremental parser is finished, please report a bug.\n"
-            return Nothing -- something went wrong.
-          ParseError s -> do
-            tell $ "Live profiler: Received incorrect event's payload: " <> toLogStr (show payload) 
-              <> ". Error: " <> toLogStr s <> "\n"
-            return Nothing  -- something went wrong. 
-          Item ev -> do 
-            modify' $ \mc -> mc { collectorParser = parser' }
-            m ev 
+          return Nothing            

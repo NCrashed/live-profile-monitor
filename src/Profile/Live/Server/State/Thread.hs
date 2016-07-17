@@ -55,7 +55,7 @@ data ThreadState = ThreadState {
 , threadSparkCount :: !(Maybe Int) -- ^ How much sparks were processed by the thread
 , threadCreationTimestamp :: !Timestamp -- ^ When the thread was created
 , threadLastTimestamp :: !Timestamp -- ^ When the thread state was changed last time
-} deriving (Generic)
+} deriving (Generic, Show)
 
 instance NFData ThreadState
 instance Serialise ThreadState

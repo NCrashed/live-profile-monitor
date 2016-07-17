@@ -34,6 +34,7 @@ data ProfileMsg =
     ProfileService {-# UNPACK #-} !ServiceMsg -- ^ Service message
   | ProfileHeader !HeaderMsg -- ^ Header message
   | ProfileEvent !EventMsg -- ^ Payload message
+  | ProfileState !EventMsgPartial -- ^ Part of bootstrap eventlog state
   deriving (Generic, Show)
 
 -- | Type of messages that controls the monitor behavior
@@ -44,7 +45,7 @@ data ServiceMsg =
 -- | Messages about eventlog header
 data HeaderMsg = 
     HeaderLength {-# UNPACK #-} !Word64
-  | HeaderType {-# UNPACK #-} !BS.ByteString
+  | HeaderType {-# UNPACK #-} !BS.ByteString -- TODO: might not fit into a datagram
   deriving (Generic, Show)
 
 -- | Type of messages that carry eventlog datum

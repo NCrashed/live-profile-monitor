@@ -39,6 +39,7 @@ import System.Timeout
 import Profile.Live.Server.Collector
 import Profile.Live.Server.Message 
 import Profile.Live.Server.Splitter
+import Profile.Live.Server.State 
 import Profile.Live.Termination 
 
 import qualified Data.ByteString as B
@@ -63,7 +64,8 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
 startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventChan = forkIO $ do 
   labelCurrentThread "Server"
   logProf logger "Server thread started"
-  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s
+  stateRef <- newIORef newEventlogState
+  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s stateRef
   logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
@@ -74,8 +76,8 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
     logProf logger "Server started to listen"
     m s
 
-  acceptAndHandle :: ServerSocket -> IO ()
-  acceptAndHandle s = forever $ do  
+  acceptAndHandle :: ServerSocket -> IORef EventlogState -> IO ()
+  acceptAndHandle s stateRef = forever $ do  
     res <- accept s
     uncurry acceptCon res
     where 
@@ -86,20 +88,32 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
     acceptCon p addr = do 
       logProf logger $ "Accepted connection from " <> showl addr
       -- _ <- listenThread p addr
-      _ <- senderThread p addr
+      let splitter = emptySplitterState $ fromMaybe maxBound eventMessageMaxSize
+      splitter' <- sendEventlogState logger p splitter stateRef
+      _ <- senderThread p addr splitter'
       return ()
 
     --listenThread p addr = forkIO $ closeOnExit p addr $ 
     --  forever yield -- TODO: add service messages listener
-    senderThread p addr = forkIO $ closeOnExit p addr $ do
+    senderThread p addr splitter = forkIO $ closeOnExit p addr $ do
       labelCurrentThread $ "Sender_" <> show addr
-      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) pausedRef eventTypeChan eventChan
+      runEventSender logger p splitter pausedRef eventTypeChan eventChan stateRef
+
+-- Send full state to the remote host
+sendEventlogState logger p splitter stateRef = do 
+  state <- readIORef stateRef 
+  let action = stepSplitter $ Left state 
+      ((msgs, splitter'), logMsgs) = runWriter $ runStateT action splitter
+  logProf' logger logMsgs
+  mapM_ (sendMessage p) msgs
+  return splitter'
 
 -- | Customisable behavior of the eventlog client
 data ClientBehavior = ClientBehavior {
   clientOnHeader :: !(Header -> IO ())  -- ^ Callback that is called when the client receives full header of the remote eventlog
 , clientOnEvent :: !(Event -> IO ()) -- ^ Callback that is called when the client receives a remote event
 , clientOnService :: !(ServiceMsg -> IO ()) -- ^ Callback that is called when the client receives service message from the server
+, clientOnState :: !(EventlogState -> IO ()) -- ^ Callback that is called when the client receives dump of eventlog alive objects
 }
 
 -- | Client behavior that does nothing
@@ -108,6 +122,7 @@ defaultClientBehavior = ClientBehavior {
     clientOnHeader = const $ return ()
   , clientOnEvent = const $ return ()
   , clientOnService = const $ return ()
+  , clientOnState = const $ return ()
   }
 
 -- | Connect to remote app and recieve eventlog from it.
@@ -165,42 +180,51 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
             clientOnService smsg
           CollectorEvents es -> do
             mapM_ clientOnEvent es
+          CollectorState s -> clientOnState s 
+          
         collector' `deepseq` go collector'
 
 
 -- | Helper for creation threads that sends events (and header) to the remote side
 runEventSender :: LoggerSet -- ^ Where to spam about everthing
   -> ServerSocket -- ^ Socket where we send the messages about eventlog
-  -> Word -- ^ Maximum size of datagram
+  -> SplitterState
   -> IORef Bool -- ^ When value set to true, the sender won't send events to remote side
   -> EventTypeChan -- ^ Channel to read eventlog header from
   -> EventChan -- ^ Channel to read events from
+  -> IORef EventlogState -- ^ Reference with global eventlog state
   -> IO ()
-runEventSender logger p maxSize pausedRef eventTypeChan eventChan  = goHeader S.empty
+runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateRef = goHeader S.empty
   where 
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
     case met of 
       Nothing -> do -- header is complete
         mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
-        goMain $ emptySplitterState maxSize
+        goMain initialSplitter False
       Just et -> do 
         let ets' = ets S.|> et 
         ets' `seq` goHeader ets'
 
-  goMain splitter = do 
+  goMain splitter oldPaused = do 
     me <- atomically $ readTBMChan eventChan
     case me of 
       Nothing -> return ()
-      Just e -> do 
-        paused <- readIORef pausedRef -- TODO: when unpaused, resend full state to remote tool
+      Just e -> do
+        atomicModifyIORef' stateRef $ \state -> (updateEventlogState e state, ())
+        paused <- readIORef pausedRef 
+        splitter' <- if (paused == oldPaused) -- After pause everything might be different
+          then return splitter
+          else sendEventlogState logger p splitter stateRef
         if paused 
-          then goMain splitter
+          then splitter' `deepseq` goMain splitter' True
           else do 
-            let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
+            let 
+              action = stepSplitter $ Right e 
+              ((msgs, splitter''), logMsgs) = runWriter $ runStateT action splitter'
             logProf' logger logMsgs
-            mapM_ (sendMessage p . ProfileEvent) msgs
-            splitter' `deepseq` goMain splitter'
+            mapM_ (sendMessage p) msgs
+            splitter'' `deepseq` goMain splitter'' False
 
 -- | Special type of errors that 'recieveMessage' can produce
 data ReceiveMsgError = 
