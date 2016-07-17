@@ -25,7 +25,6 @@ import Control.Monad.IO.Class
 import Data.IORef 
 import System.Log.FastLogger
 
-import Profile.Live.Hidden 
 import Profile.Live.Options 
 import Profile.Live.Parser 
 import Profile.Live.Server
@@ -45,12 +44,9 @@ initLiveProfile opts eventLogger = liftIO $ do
   eventLogPipeThread <- redirectEventlog eventLogger opts (eventLogTerminate, eventLogPipeThreadTerm)
     eventTypeChan eventChan
 
-  let hiddenSet = if eventHideMonitorActivity opts
-        then eventLogPipeThread `addToHiddenSet` emptyHiddenSet
-        else emptyHiddenSet
   eventLogServerThreadTerm <- newEmptyMVar
   eventLogServerThread <- startLiveServer eventLogger opts (eventLogTerminate, eventLogServerThreadTerm)
-    eventLogPause eventTypeChan eventChan hiddenSet
+    eventLogPause eventTypeChan eventChan
   return LiveProfiler {..}
 
 -- | Destroy live profiler.

@@ -36,7 +36,6 @@ import System.Socket.Protocol.TCP
 import System.Socket.Type.Stream
 import System.Timeout
 
-import Profile.Live.Hidden
 import Profile.Live.Server.Collector
 import Profile.Live.Server.Message 
 import Profile.Live.Server.Splitter
@@ -60,14 +59,11 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> IORef Bool -- ^ Holds flag whether the monitor is paused
   -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
   -> EventChan -- ^ Channel for events (input)
-  -> HiddenThreadSet -- ^ Which threads should be hidden from the remote client
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan hiddenSet = forkIO $ do 
+startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan = forkIO $ do 
   labelCurrentThread "Server"
   logProf logger "Server thread started"
-  hiddenRef <- newIORef hiddenSet
-  when eventHideMonitorActivity $ atomicHideCurrentThread hiddenRef
-  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s hiddenRef
+  withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s
   logProf logger "Server thread terminated"
   where
   withSocket m = bracket (socket :: IO ServerSocket) close $ \s -> do 
@@ -78,8 +74,8 @@ startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan hidden
     logProf logger "Server started to listen"
     m s
 
-  acceptAndHandle :: ServerSocket -> IORef HiddenThreadSet -> IO ()
-  acceptAndHandle s hiddenRef = forever $ do  
+  acceptAndHandle :: ServerSocket -> IO ()
+  acceptAndHandle s = forever $ do  
     res <- accept s
     uncurry acceptCon res
     where 
@@ -97,8 +93,7 @@ startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan hidden
     --  forever yield -- TODO: add service messages listener
     senderThread p addr = forkIO $ closeOnExit p addr $ do
       labelCurrentThread $ "Sender_" <> show addr
-      when eventHideMonitorActivity $ atomicHideCurrentThread hiddenRef
-      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan hiddenRef
+      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
 
 -- | Customisable behavior of the eventlog client
 data ClientBehavior = ClientBehavior {
@@ -179,9 +174,8 @@ runEventSender :: LoggerSet -- ^ Where to spam about everthing
   -> Word -- ^ Maximum size of datagram
   -> EventTypeChan -- ^ Channel to read eventlog header from
   -> EventChan -- ^ Channel to read events from
-  -> IORef HiddenThreadSet -- ^ Which threads should be hidden from the remote client
   -> IO ()
-runEventSender logger p maxSize eventTypeChan eventChan hiddenRef = goHeader S.empty
+runEventSender logger p maxSize eventTypeChan eventChan  = goHeader S.empty
   where 
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
@@ -198,13 +192,10 @@ runEventSender logger p maxSize eventTypeChan eventChan hiddenRef = goHeader S.e
     case me of 
       Nothing -> return ()
       Just e -> do 
-        hiddenSet <- readIORef hiddenRef
-        if (not $ e `isHiddenEvent` hiddenSet) then do 
-          let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
-          logProf' logger logMsgs
-          mapM_ (sendMessage p . ProfileEvent) msgs
-          splitter' `deepseq` goMain splitter'
-        else goMain splitter
+        let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
+        logProf' logger logMsgs
+        mapM_ (sendMessage p . ProfileEvent) msgs
+        splitter' `deepseq` goMain splitter'
 
 -- | Special type of errors that 'recieveMessage' can produce
 data ReceiveMsgError = 

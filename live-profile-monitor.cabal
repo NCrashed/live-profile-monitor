@@ -16,7 +16,6 @@ library
   hs-source-dirs:      src
   exposed-modules:
     Profile.Live
-    Profile.Live.Hidden
     Profile.Live.Options 
     Profile.Live.Parser 
     Profile.Live.Pipe
