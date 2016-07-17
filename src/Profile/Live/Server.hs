@@ -60,7 +60,7 @@ startLiveServer :: LoggerSet -- ^ Monitor logger
   -> EventTypeChan -- ^ Channel for event types, should be closed as soon as first event occured (input)
   -> EventChan -- ^ Channel for events (input)
   -> IO ThreadId
-startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan = forkIO $ do 
+startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventChan = forkIO $ do 
   labelCurrentThread "Server"
   logProf logger "Server thread started"
   withSocket $ \s -> untilTerminatedPair term $ acceptAndHandle s
@@ -93,7 +93,7 @@ startLiveServer logger LiveProfileOpts{..} term _ eventTypeChan eventChan = fork
     --  forever yield -- TODO: add service messages listener
     senderThread p addr = forkIO $ closeOnExit p addr $ do
       labelCurrentThread $ "Sender_" <> show addr
-      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) eventTypeChan eventChan
+      runEventSender logger p (fromMaybe maxBound eventMessageMaxSize) pausedRef eventTypeChan eventChan
 
 -- | Customisable behavior of the eventlog client
 data ClientBehavior = ClientBehavior {
@@ -172,10 +172,11 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
 runEventSender :: LoggerSet -- ^ Where to spam about everthing
   -> ServerSocket -- ^ Socket where we send the messages about eventlog
   -> Word -- ^ Maximum size of datagram
+  -> IORef Bool -- ^ When value set to true, the sender won't send events to remote side
   -> EventTypeChan -- ^ Channel to read eventlog header from
   -> EventChan -- ^ Channel to read events from
   -> IO ()
-runEventSender logger p maxSize eventTypeChan eventChan  = goHeader S.empty
+runEventSender logger p maxSize pausedRef eventTypeChan eventChan  = goHeader S.empty
   where 
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
@@ -192,10 +193,14 @@ runEventSender logger p maxSize eventTypeChan eventChan  = goHeader S.empty
     case me of 
       Nothing -> return ()
       Just e -> do 
-        let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
-        logProf' logger logMsgs
-        mapM_ (sendMessage p . ProfileEvent) msgs
-        splitter' `deepseq` goMain splitter'
+        paused <- readIORef pausedRef -- TODO: when unpaused, resend full state to remote tool
+        if paused 
+          then goMain splitter
+          else do 
+            let ((msgs, splitter'), logMsgs) = runWriter $ runStateT (stepSplitter e) splitter
+            logProf' logger logMsgs
+            mapM_ (sendMessage p . ProfileEvent) msgs
+            splitter' `deepseq` goMain splitter'
 
 -- | Special type of errors that 'recieveMessage' can produce
 data ReceiveMsgError = 
