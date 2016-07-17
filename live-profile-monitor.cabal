@@ -23,6 +23,8 @@ library
     Profile.Live.Server.Collector
     Profile.Live.Server.Message
     Profile.Live.Server.Splitter
+    Profile.Live.Server.State
+    Profile.Live.Server.State.Thread
     Profile.Live.State
     Profile.Live.Termination
   c-sources:
