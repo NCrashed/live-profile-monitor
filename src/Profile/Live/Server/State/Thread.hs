@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 -------------------------------------------------------------------------------
 -- |
--- Module      :  Profile.Live.Server.State
+-- Module      :  Profile.Live.Server.State.Thread
 -- Copyright   :  (c) Anton Gushcha 2016
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -48,13 +48,13 @@ instance Serialise ThreadExecutionState
 
 -- | The full state of single Thread
 data ThreadState = ThreadState {
-  threadId :: !ThreadId -- ^ Id of the thread
-, threadLabel :: !(Maybe String) -- ^ User can assign names for threads
-, threadCap :: !Int -- ^ Current capability of the thread (negative means no current cap)
-, threadExecution :: !ThreadExecutionState -- ^ Execution state
-, threadSparkCount :: !(Maybe Int) -- ^ How much sparks were processed by the thread
-, threadCreationTimestamp :: !Timestamp -- ^ When the thread was created
-, threadLastTimestamp :: !Timestamp -- ^ When the thread state was changed last time
+  threadId :: {-# UNPACK #-} !ThreadId -- ^ Id of the thread
+, threadLabel :: {-# UNPACK #-} !(Maybe String) -- ^ User can assign names for threads
+, threadCap :: {-# UNPACK #-} !Int -- ^ Current capability of the thread (negative means no current cap)
+, threadExecution :: {-# UNPACK #-} !ThreadExecutionState -- ^ Execution state
+, threadSparkCount :: {-# UNPACK #-} !(Maybe Int) -- ^ How much sparks were processed by the thread
+, threadCreationTimestamp :: {-# UNPACK #-} !Timestamp -- ^ When the thread was created
+, threadLastTimestamp :: {-# UNPACK #-} !Timestamp -- ^ When the thread state was changed last time
 } deriving (Generic, Show)
 
 instance NFData ThreadState
