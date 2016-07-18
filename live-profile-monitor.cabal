@@ -25,6 +25,7 @@ library
     Profile.Live.Server.Splitter
     Profile.Live.Server.State
     Profile.Live.Server.State.Capability
+    Profile.Live.Server.State.Task
     Profile.Live.Server.State.Thread
     Profile.Live.State
     Profile.Live.Termination

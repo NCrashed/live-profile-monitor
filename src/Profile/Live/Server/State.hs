@@ -25,6 +25,7 @@ import GHC.Generics
 import GHC.RTS.Events 
 
 import Profile.Live.Server.State.Capability
+import Profile.Live.Server.State.Task
 import Profile.Live.Server.State.Thread
 
 -- | Storage of all state of eventlog protocol.
@@ -38,6 +39,8 @@ data EventlogState = EventlogState {
   , eventlogCapsets :: !CapsetsState
   -- | Part of state about caps
   , eventlogCaps :: !CapsState 
+  -- | Part of state about tasks
+  , eventlogTasks :: !TasksState
     -- | If 'Just' the GC is performed and the value contains time of GC begin
   , eventlogGC :: !(Maybe Timestamp)
   } deriving (Generic, Show)
@@ -51,6 +54,7 @@ newEventlogState = EventlogState {
     eventlogThreads = newThreadsState
   , eventlogCapsets = newCapsetsState
   , eventlogCaps = newCapsState 
+  , eventlogTasks = newTasksState
   , eventlogGC = Nothing
   }
 
@@ -60,6 +64,7 @@ updateEventlogState !e !es
   | isThreadEvent e = es { eventlogThreads = updateThreadsState e (eventlogThreads es) }
   | isCapsetEvent e = es { eventlogCapsets = updateCapsetsState e (eventlogCapsets es) }
   | isCapEvent e = es { eventlogCaps = updateCapsState e (eventlogCaps es) }
+  | isTaskEvent e = es { eventlogTasks = updateTasksState e (eventlogTasks es) }
   | isGCEvent e = es { eventlogGC = updateGCState e (eventlogGC es) }
   | otherwise = es 
 
