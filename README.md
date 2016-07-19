@@ -13,9 +13,9 @@ GHC master.
 
 * Clone and boot the repo: 
 ```
-git clone https://github.com/NCrashed/live-profile-monitor.git
+git clone https://github.com/NCrashed/live-profile-monitor.git --recursive
 cd live-profile-monitor
-git submodule update --init --recursive
+cd ghc-events && git checkout incremental && cd .. 
 ```
 
 ## Cabal >= 1.24
