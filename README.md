@@ -14,7 +14,7 @@ GHC master.
 * Clone and boot the repo: 
 ```
 git clone https://github.com/NCrashed/live-profile-monitor.git
-cd bar
+cd live-profile-monitor
 git submodule update --init --recursive
 ```
 
