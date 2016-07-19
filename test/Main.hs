@@ -4,6 +4,7 @@ module Main where
 import Control.Concurrent
 import Control.Monad 
 import System.Log.FastLogger
+import System.Environment
 
 import Test.Client
 import Test.Put 
@@ -17,8 +18,9 @@ import Foreign.C
 main :: IO ()
 main = do 
   runEventlogSerialisationTests
-
-  ph <- spawnCommand "hs-live-profile --RTS ./.stack-work/dist/*/Cabal-*/build/test-leech/test-leech +RTS -lm -N4"
+  
+  [path] <- getArgs
+  ph <- spawnCommand $ "hs-live-profile --RTS " ++ path ++ " +RTS -lm -N4"
 
   threadDelay 1000000
   flag <- doesFileExist "test.eventlog"
