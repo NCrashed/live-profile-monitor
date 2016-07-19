@@ -1,6 +1,6 @@
 [submodule "ghc-events"]
 	path = ghc-events
-	url = https://github.com/kvelicka/ghc-events.git
+	url = https://github.com/NCrashed/ghc-events.git
 	branch = incremental
 [submodule "binary-serialise-cbor"]
 	path = binary-serialise-cbor
