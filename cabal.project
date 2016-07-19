@@ -1,4 +1,5 @@
 packages: 
+  ./
   ghc-events/
   binary-serialise-cbor/
   live-profile-leech/
