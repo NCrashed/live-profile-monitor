@@ -48,15 +48,15 @@ instance Serialise CapsetType
 -- | The full state of single capset
 data CapsetState = CapsetState {
   capsetStateId :: {-# UNPACK #-} !Capset -- ^ Unique id 
-, capsetStateType :: {-# UNPACK #-} !CapsetType -- ^ Type of the capset
-, capsetStateCaps :: {-# UNPACK #-} !(S.Seq Int) -- ^ Assigned caps
+, capsetStateType :: !CapsetType -- ^ Type of the capset
+, capsetStateCaps :: !(S.Seq Int) -- ^ Assigned caps
 , capsetStateLastTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Last change timestamp
 , capsetStateTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Creation timestamp
-, capsetStateRtsIdent :: {-# UNPACK #-} !String -- ^ RTS version and general info
-, capsetStateArgs :: {-# UNPACK #-} ![String] -- ^ Program arguments
-, capsetStateEnvs :: {-# UNPACK #-} ![String] -- ^ Program environment
-, capsetStateOsPid :: {-# UNPACK #-} !(Maybe PID) -- ^ OS process id assigned to capset
-, capsetStateOsParentPid :: {-# UNPACK #-} !(Maybe PID) -- ^ OS process id of parent process 
+, capsetStateRtsIdent :: !String -- ^ RTS version and general info
+, capsetStateArgs :: ![String] -- ^ Program arguments
+, capsetStateEnvs :: ![String] -- ^ Program environment
+, capsetStateOsPid ::  !(Maybe PID) -- ^ OS process id assigned to capset
+, capsetStateOsParentPid ::  !(Maybe PID) -- ^ OS process id of parent process 
 , capsetStateWallSecs :: {-# UNPACK #-} !Word64 -- ^ Value of capset wall clock
 , capsetStateWallNsecs :: {-# UNPACK #-} !Word32 -- ^ Value of capset wall clock
 , capsetStateHeapAllocated :: {-# UNPACK #-} !Word64 -- ^ Last info about allocated bytes
@@ -67,7 +67,7 @@ data CapsetState = CapsetState {
 , capsetStateHeapAllocAreaSize :: {-# UNPACK #-} !Word64 -- ^ Last info about heap alloc area size
 , capsetStateHeapMBlockSize :: {-# UNPACK #-} !Word64 -- ^ Last info about mblock(?) size
 , capsetStateHeapBlockSize :: {-# UNPACK #-} !Word64 -- ^ Last info about block size
-, capsetStateGCTimestamp :: {-# UNPACK #-} !(Maybe Timestamp) -- ^ Last GC time
+, capsetStateGCTimestamp :: !(Maybe Timestamp) -- ^ Last GC time
 , capsetStateGCCopied :: {-# UNPACK #-} !Word64 -- ^ Last GC copied size
 , capsetStateGCSlop :: {-# UNPACK #-} !Word64 -- ^ Last GC slop value
 , capsetStateGCFrag :: {-# UNPACK #-} !Word64 -- ^ Last GC frag value
@@ -228,7 +228,7 @@ updateCapsetsState e csss = case getCapsetId e of
 -- | The full state of single capability
 data CapState = CapState {
   capStateId :: {-# UNPACK #-} !Int -- ^ Unique id of capability
-, capStateDisabled :: {-# UNPACK #-} !Bool -- ^ Is the cap is disabled
+, capStateDisabled :: !Bool -- ^ Is the cap is disabled
 , capStateLastTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Time of last change (creation of enable/disable)
 , capStateTimestamp :: {-# UNPACK #-} !Timestamp -- ^ Time of creation
 } deriving (Generic, Show)
