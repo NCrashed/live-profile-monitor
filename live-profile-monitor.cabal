@@ -94,7 +94,9 @@ test-suite test-monitor
   default-language: Haskell2010
   build-depends: 
       base
+    , live-profile-client
     , live-profile-monitor
+    , live-profile-protocol
     , socket >= 0.6
     , bytestring >= 0.10
     , directory >= 1.2

@@ -9,8 +9,6 @@ import Foreign.C
 
 import qualified Data.ByteString as BS
 
-import Control.Concurrent (forkIO)
-
 -- | Pipe OS thread configuration
 data PipeOptions = PipeOptions {
   -- | Name of FIFO file on linux or named pipe on Windows

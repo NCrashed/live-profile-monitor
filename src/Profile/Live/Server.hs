@@ -9,20 +9,11 @@ import Control.Concurrent.STM.TBMChan
 import Control.DeepSeq
 import Control.Exception 
 import Control.Monad 
-import Control.Monad.Except 
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict (runWriter)
-import Data.Binary.Serialise.CBOR
 import Data.IORef 
 import Data.Maybe
 import Data.Monoid 
-import Data.Storable.Endian
-import Data.Time.Clock
-import Data.Word 
-import Foreign hiding (void)
-import Foreign.C.Types 
-import GHC.Generics
-import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
 
 import Profile.Live.Options 
@@ -32,21 +23,14 @@ import System.Socket
 import System.Socket.Family.Inet6
 import System.Socket.Protocol.TCP
 import System.Socket.Type.Stream
-import System.Timeout
 
-import Profile.Live.Protocol.Collector
 import Profile.Live.Protocol.Message 
 import Profile.Live.Protocol.Splitter
 import Profile.Live.Protocol.State 
 import Profile.Live.Protocol.Utils
 import Profile.Live.Termination 
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BS 
-import qualified Data.ByteString.Unsafe as BS 
 import qualified Data.Sequence as S 
-
-import Debug.Trace 
 
 -- | Socket type that is used for the server
 type ServerSocket = Socket Inet6 Stream TCP
@@ -99,9 +83,14 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
       runEventSender logger p splitter pausedRef eventTypeChan eventChan stateRef
 
 -- Send full state to the remote host
+sendEventlogState :: LoggerSet 
+  -> ServerSocket
+  -> SplitterState
+  -> IORef EventlogState
+  -> IO SplitterState
 sendEventlogState logger p splitter stateRef = do 
-  state <- readIORef stateRef 
-  let action = stepSplitter $ Left state 
+  st <- readIORef stateRef 
+  let action = stepSplitter $ Left st 
       ((msgs, splitter'), logMsgs) = runWriter $ runStateT action splitter
   logProf' logger logMsgs
   mapM_ (sendMessage p) msgs
@@ -123,7 +112,7 @@ runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateR
     case met of 
       Nothing -> do -- header is complete
         let msgs = mkHeaderMsgs ets
-        mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
+        mapM_ (sendMessage p . ProfileHeader) msgs
         goMain initialSplitter False
       Just et -> do 
         let ets' = ets S.|> et 

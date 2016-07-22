@@ -3,9 +3,15 @@
 	[
 		{
 			"name": "Stack",
-			"shell_cmd": ". ~/.bashrc && stack install --compiler=ghc-8.1",
+			"shell_cmd": "stack install --compiler=ghc-8.1",
 			"working_dir": "${project_path}"
-		}
+		},
+		{
+			"name": "Stack pedantic",
+			"shell_cmd": "stack install --compiler=ghc-8.1 --pedantic",
+			"working_dir": "${project_path}"
+		},
+
 	],
 	"folders":
 	[

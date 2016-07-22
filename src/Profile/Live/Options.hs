@@ -6,7 +6,6 @@ module Profile.Live.Options(
   ) where 
 
 import System.Socket.Family.Inet6
-import Data.Time.Clock
 import Data.Word 
 
 -- | Options of live profile monitor

@@ -6,9 +6,7 @@ module Profile.Live.State(
 
 import Control.Concurrent
 import Control.Concurrent.STM.TBMChan
-import Data.IORef 
-import Data.Monoid
-import GHC.Conc.Sync (labelThread)
+import Data.IORef
 import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
 

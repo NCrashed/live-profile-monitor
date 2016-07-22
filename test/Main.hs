@@ -3,7 +3,6 @@ module Main where
 
 import Control.Concurrent
 import Control.Monad 
-import System.Log.FastLogger
 import System.Environment
 
 import Test.Client
@@ -11,9 +10,6 @@ import Test.Put
 
 import System.Directory
 import System.Process 
-
-import Foreign 
-import Foreign.C 
 
 main :: IO ()
 main = do 

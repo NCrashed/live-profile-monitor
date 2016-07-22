@@ -3,17 +3,15 @@ module Test.Put(
     runEventlogSerialisationTests
   ) where
 
-import Data.Binary.Put 
 import GHC.RTS.Events 
 import GHC.RTS.EventsIncremental 
 import Control.DeepSeq 
 
 import qualified Data.Sequence as S 
-import qualified Data.ByteString as BS 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Foldable as F 
 
-import Profile.Live.Server.Message()
+import Profile.Live.Protocol.Message()
 
 testHeader :: Header 
 testHeader = Header { eventTypes = [
@@ -89,9 +87,9 @@ testEvents = Data {
   }
 
 deserialiseEventLog :: BSL.ByteString -> EventLog 
-deserialiseEventLog bs = go False S.empty parser 
+deserialiseEventLog bs = go False S.empty initParser 
   where 
-  parser = newParserState `pushBytes` BSL.toStrict bs 
+  initParser = newParserState `pushBytes` BSL.toStrict bs 
   go wasIncomplete !acc !parser = let 
     (res, parser') = readEvent parser
     in case res of 
@@ -100,8 +98,8 @@ deserialiseEventLog bs = go False S.empty parser
         else go True acc parser'
       ParseError s -> error $ "deserializeEventLog: " ++ s
       Complete -> let 
-        Just header = readHeader parser'
-        in EventLog header (Data (F.toList acc))
+        Just header' = readHeader parser'
+        in EventLog header' (Data (F.toList acc))
 
 checkEventlogSerialisation :: EventLog -> IO ()
 checkEventlogSerialisation el = el' `deepseq` return ()

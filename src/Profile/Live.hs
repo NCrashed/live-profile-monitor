@@ -24,7 +24,6 @@ import Profile.Live.Options
 import Profile.Live.Parser 
 import Profile.Live.Server
 import Profile.Live.State 
-import Profile.Live.Termination 
 import Profile.Live.Protocol.Utils 
 
 -- | Initialize live profile monitor that accepts connections

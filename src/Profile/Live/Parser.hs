@@ -6,18 +6,15 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBMChan
 import Control.Exception (bracket)
-import Control.Monad (void, when)
+import Control.Monad
 import Data.IORef
-import Data.Maybe
 import Data.Monoid 
-import Debug.Trace
 import Foreign hiding (void)
 import GHC.RTS.Events hiding (ThreadId)
 import GHC.RTS.EventsIncremental 
 import System.Log.FastLogger
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Unsafe as B 
 
 import Profile.Live.Options 
 import Profile.Live.Pipe 
@@ -25,8 +22,6 @@ import Profile.Live.Protocol.State
 import Profile.Live.Protocol.Utils 
 import Profile.Live.State 
 import Profile.Live.Termination
-
-import Debug.Trace 
 
 -- | Initialise link with C world that pipes data from FIFO file (or named pipe on Windows)
 initMemoryPipe :: FilePath -- ^ Pipe name
@@ -71,7 +66,7 @@ redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
         mhmsg <- atomically $ do 
           closed <- isClosedTBMChan eventTypeChan
           if not closed then do
-              msgs <- putHeader parserState'' 
+              msgs <- putHeader' parserState'' 
               closeTBMChan eventTypeChan
               return msgs
             else return Nothing
@@ -84,8 +79,8 @@ redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
       ParseError er -> logProf logger $ "parserThread error: " <> toLogStr er
     go stateRef pipe parserState''
 
-  putHeader :: EventParserState -> STM (Maybe LogStr)
-  putHeader parserState = case readHeader parserState of 
+  putHeader' :: EventParserState -> STM (Maybe LogStr)
+  putHeader' parserState = case readHeader parserState of 
     Nothing -> return . Just $ "parserThread warning: got no header, that is definitely a bug.\n"
     Just Header{..} -> mapM_ putEventType' eventTypes >> return Nothing
 

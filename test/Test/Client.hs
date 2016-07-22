@@ -11,15 +11,11 @@ import GHC.RTS.Events
 import System.IO
 import System.Log.FastLogger
 
-import Profile.Live.Options 
-import Profile.Live.Server
-import Profile.Live.State 
+import Profile.Live.Client
 import Profile.Live.Termination
 
 import qualified Data.ByteString as BS 
 import qualified Data.ByteString.Lazy as BSL
-
-import Debug.Trace 
 
 receiveRemoteEventlog :: Termination -> FilePath -> IO Termination
 receiveRemoteEventlog term filename = do
@@ -34,14 +30,14 @@ receiveRemoteEventlog term filename = do
           , clientOnState = print 
           }
 
-    cid <- startLiveClient logger opts (term, serverTerm) behavior
-    writeLogFile term fileChan
+    _ <- startLiveClient logger opts (term, serverTerm) behavior
+    writeLogFile fileChan
     terminate serverTerm
   return serverTerm
   where
 
-  writeLogFile :: Termination -> TChan (Either Header Event) -> IO ()
-  writeLogFile term chan = withFile filename WriteMode $ \h -> 
+  writeLogFile :: TChan (Either Header Event) -> IO ()
+  writeLogFile chan = withFile filename WriteMode $ \h -> 
     onExit (finishLog h) $ untilTerminated term $ forever $ do 
       mres <- atomically $ readTChan chan
       case mres of 
