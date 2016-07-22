@@ -36,10 +36,10 @@ import System.Socket.Protocol.TCP
 import System.Socket.Type.Stream
 import System.Timeout
 
-import Profile.Live.Server.Collector
-import Profile.Live.Server.Message 
-import Profile.Live.Server.Splitter
-import Profile.Live.Server.State 
+import Profile.Live.Protocol.Collector
+import Profile.Live.Protocol.Message 
+import Profile.Live.Protocol.Splitter
+import Profile.Live.Protocol.State 
 import Profile.Live.Termination 
 
 import qualified Data.ByteString as B

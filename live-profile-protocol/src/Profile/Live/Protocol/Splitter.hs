@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Profile.Live.Server.Splitter(
+module Profile.Live.Protocol.Splitter(
     SplitterState
   , emptySplitterState
   , mkHeaderMsgs
@@ -16,8 +16,8 @@ import Data.Word
 import GHC.Generics 
 import GHC.RTS.Events
 
-import Profile.Live.Server.Message
-import Profile.Live.Server.State 
+import Profile.Live.Protocol.Message
+import Profile.Live.Protocol.State 
 
 import qualified Data.Sequence as S 
 import qualified Data.ByteString.Lazy as BSL

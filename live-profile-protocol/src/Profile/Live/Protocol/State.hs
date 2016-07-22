@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- |
--- Module      :  Profile.Live.Server.State
+-- Module      :  Profile.Live.Protocol.State
 -- Copyright   :  (c) Anton Gushcha 2016
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -13,7 +13,7 @@
 -- side. Having relevant state simplifies client work of correct visualization. 
 --
 ------------------------------------------------------------------------------
-module Profile.Live.Server.State(
+module Profile.Live.Protocol.State(
     EventlogState
   , newEventlogState
   , updateEventlogState
@@ -24,9 +24,9 @@ import Data.Binary.Serialise.CBOR
 import GHC.Generics 
 import GHC.RTS.Events 
 
-import Profile.Live.Server.State.Capability
-import Profile.Live.Server.State.Task
-import Profile.Live.Server.State.Thread
+import Profile.Live.Protocol.State.Capability
+import Profile.Live.Protocol.State.Task
+import Profile.Live.Protocol.State.Thread
 
 -- | Storage of all state of eventlog protocol.
 --

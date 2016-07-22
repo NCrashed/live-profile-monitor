@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Profile.Live.Server.Collector(
+module Profile.Live.Protocol.Collector(
     MessageCollector
   , CollectorOutput(..)
   , emptyMessageCollector
@@ -28,9 +28,12 @@ import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as H
 import qualified Data.Sequence as S 
 
-import Profile.Live.Server.Message
-import Profile.Live.Server.State 
-import Profile.Live.State 
+import Profile.Live.Protocol.Message
+import Profile.Live.Protocol.State
+
+-- | Shorthand for 'toLogStr . show'
+showl :: Show a => a -> LogStr
+showl = toLogStr . show 
 
 -- | State of message decoder, helps to collect partial and blocked messages into
 -- ordinal 'Event'

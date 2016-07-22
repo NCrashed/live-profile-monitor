@@ -20,13 +20,6 @@ library
     Profile.Live.Parser 
     Profile.Live.Pipe
     Profile.Live.Server
-    Profile.Live.Server.Collector
-    Profile.Live.Server.Message
-    Profile.Live.Server.Splitter
-    Profile.Live.Server.State
-    Profile.Live.Server.State.Capability
-    Profile.Live.Server.State.Task
-    Profile.Live.Server.State.Thread
     Profile.Live.State
     Profile.Live.Termination
   c-sources:
@@ -34,6 +27,7 @@ library
 
   build-depends:       
       base >= 4.7 && < 5
+    , live-profile-protocol == 0.1.*
     , binary >= 0.7.6
     , binary-serialise-cbor >= 0.1.1.0
     , bytestring >= 0.10

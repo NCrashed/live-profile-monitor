@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Profile.Live.Server.Message(
+module Profile.Live.Protocol.Message(
     ProfileMsg(..)
   , ServiceMsg(..)
   , HeaderMsg(..)

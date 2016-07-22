@@ -19,7 +19,7 @@ import qualified Data.ByteString.Unsafe as B
 
 import Profile.Live.Options 
 import Profile.Live.Pipe 
-import Profile.Live.Server.State 
+import Profile.Live.Protocol.State 
 import Profile.Live.State 
 import Profile.Live.Termination
 

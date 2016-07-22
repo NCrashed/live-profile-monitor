@@ -1,0 +1,26 @@
+name:                live-profile-client
+version:             0.1.0.0
+synopsis:            Library for live profiling that connects to remote application.
+description:         Please see README.md
+homepage:            https://github.com/ncrashed/live-profile-monitor#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Anton Gushcha <ncrashed@gmail.com>
+maintainer:          ncrashed@gmail.com
+copyright:           2016 Anton Gushcha
+category:            Development, GHC, Debug, Profiling, Trace
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:
+    Profile.Live.Client
+  build-depends:       
+      base >= 4.7 && < 5
+    , live-profile-protocol == 0.1.*
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/ncrashed/live-profile-monitor

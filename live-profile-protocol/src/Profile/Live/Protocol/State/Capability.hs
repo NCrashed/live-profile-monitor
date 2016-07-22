@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 -------------------------------------------------------------------------------
 -- |
--- Module      :  Profile.Live.Server.State.Capability
+-- Module      :  Profile.Live.Protocol.State.Capability
 -- Copyright   :  (c) Anton Gushcha 2016
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -12,7 +12,7 @@
 -- Utilities to watch only capabilities state of eventlog.
 --
 ------------------------------------------------------------------------------
-module Profile.Live.Server.State.Capability(
+module Profile.Live.Protocol.State.Capability(
   -- * Capability set state 
     CapsetState(..)
   , isCapsetEvent

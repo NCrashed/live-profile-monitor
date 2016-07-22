@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 -------------------------------------------------------------------------------
 -- |
--- Module      :  Profile.Live.Server.State.Thread
+-- Module      :  Profile.Live.Protocol.State.Thread
 -- Copyright   :  (c) Anton Gushcha 2016
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -12,7 +12,7 @@
 -- Utilities to watch only threads state of eventlog.
 --
 ------------------------------------------------------------------------------
-module Profile.Live.Server.State.Thread(
+module Profile.Live.Protocol.State.Thread(
     ThreadExecutionState
   , ThreadState(..)
   , isSparkThread

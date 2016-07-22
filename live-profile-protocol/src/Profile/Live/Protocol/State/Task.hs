@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 -------------------------------------------------------------------------------
 -- |
--- Module      :  Profile.Live.Server.State.Task
+-- Module      :  Profile.Live.Protocol.State.Task
 -- Copyright   :  (c) Anton Gushcha 2016
 -- License     :  BSD-style (see the file LICENSE)
 --
@@ -12,7 +12,7 @@
 -- Utilities to watch only tasks state of eventlog.
 --
 ------------------------------------------------------------------------------
-module Profile.Live.Server.State.Task(
+module Profile.Live.Protocol.State.Task(
     TaskState(..)
   , isTaskEvent
   , TasksState
