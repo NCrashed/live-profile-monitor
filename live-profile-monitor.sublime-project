@@ -1,16 +1,19 @@
 {
+	"build_systems":
+	[
+		{
+			"name": "Stack",
+			"shell_cmd": ". ~/.bashrc && stack install --compiler=ghc-8.1",
+			"working_dir": "${project_path}"
+		}
+	],
 	"folders":
 	[
 		{
 			"path": "."
+		},
+		{
+			"path": "C:\\dev\\ghc"
 		}
-	],
-  "build_systems":
-  [
-    {
-      "name": "Stack",
-      "shell_cmd": ". ~/.bashrc && stack install --compiler=ghc-8.1",
-      "working_dir": "${project_path}"
-    }
-  ]
+	]
 }

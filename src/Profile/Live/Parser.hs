@@ -23,6 +23,8 @@ import Profile.Live.Server.State
 import Profile.Live.State 
 import Profile.Live.Termination
 
+import Debug.Trace 
+
 -- | Initialise link with C world that pipes data from FIFO file (or named pipe on Windows)
 initMemoryPipe :: FilePath -- ^ Pipe name
   -> Word64 -- ^ Chunk size

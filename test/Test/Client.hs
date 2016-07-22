@@ -19,6 +19,8 @@ import Profile.Live.Termination
 import qualified Data.ByteString as BS 
 import qualified Data.ByteString.Lazy as BSL
 
+import Debug.Trace 
+
 receiveRemoteEventlog :: Termination -> FilePath -> IO Termination
 receiveRemoteEventlog term filename = do
   serverTerm <- newEmptyMVar

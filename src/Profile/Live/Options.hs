@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Profile.Live.Options(
   -- * Server side
     LiveProfileOpts(..)
@@ -37,7 +38,11 @@ data LiveProfileOpts = LiveProfileOpts {
 defaultLiveProfileOpts :: LiveProfileOpts
 defaultLiveProfileOpts = LiveProfileOpts {
     eventLogChunkSize = 1024 -- 1 Kb
+#ifdef mingw32_HOST_OS
+  , eventLogPipeName = "\\\\.\\pipe\\events"
+#else
   , eventLogPipeName = "events.pipe"
+#endif
   , eventLogListenPort = 8242
   , eventChannelMaximumSize = Nothing
   , eventMessageMaxSize = Nothing

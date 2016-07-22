@@ -131,7 +131,7 @@ startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
   -> TerminationPair  -- ^ Termination protocol
   -> ClientBehavior -- ^ User specified callbacks 
   -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
-startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ do 
+startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ printExceptions $ do 
   labelCurrentThread "Client"
   untilTerminatedPair term $ bracket socket clientClose $ \s -> do
     connect s clientTargetAddr
@@ -147,6 +147,10 @@ startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ do
     --_ <- senderThread s
 
   --senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
+
+-- | Helper that prints all exceptions passed through
+printExceptions :: IO a -> IO a 
+printExceptions m = catch m $ \(e :: SomeException) -> print e >> throw e 
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
 runEventListener :: LoggerSet -- ^ Where to spam about everything
@@ -200,6 +204,7 @@ runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateR
     met <- atomically $ readTBMChan eventTypeChan
     case met of 
       Nothing -> do -- header is complete
+        let msgs = mkHeaderMsgs ets
         mapM_ (sendMessage p . ProfileHeader) $ mkHeaderMsgs ets 
         goMain initialSplitter False
       Just et -> do 
@@ -234,10 +239,10 @@ data ReceiveMsgError =
 -- | Helper to read next message from the socket
 recieveMessage :: ServerSocket -> IO (Either ReceiveMsgError ProfileMsg)
 recieveMessage p = runExceptT $ do 
-  lbytes <- liftIO $ receive p 4 (msgWaitAll <> msgNoSignal)
+  lbytes <- liftIO $ receive p 4 msgNoSignal
   guardEndOfInput lbytes 
   (l :: Word32) <- liftIO $ BS.unsafeUseAsCString lbytes $ peekBE . castPtr
-  msgbytes <- liftIO $ receive p (fromIntegral l) (msgWaitAll <> msgNoSignal)
+  msgbytes <- liftIO $ receive p (fromIntegral l) msgNoSignal
   guardEndOfInput msgbytes 
   case deserialiseOrFail $ BS.fromStrict msgbytes of 
     Left er -> throwError . MsgDeserialisationFail $ "Failed to deserialize message: " 
