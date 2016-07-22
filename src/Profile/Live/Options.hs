@@ -3,9 +3,6 @@ module Profile.Live.Options(
   -- * Server side
     LiveProfileOpts(..)
   , defaultLiveProfileOpts
-  -- * Client side
-  , LiveProfileClientOpts(..)
-  , defaultLiveProfileClientOpts
   ) where 
 
 import System.Socket.Family.Inet6
@@ -47,19 +44,4 @@ defaultLiveProfileOpts = LiveProfileOpts {
   , eventChannelMaximumSize = Nothing
   , eventMessageMaxSize = Nothing
   , eventHideMonitorActivity = False
-  }
-
--- | Options for live profile client side
-data LiveProfileClientOpts = LiveProfileClientOpts {
-  -- | Target address where the client connects to 
-    clientTargetAddr :: !(SocketAddress Inet6)
-  -- | How long to wait until the server drops outdated sequences of partial messages and blocks.
-  , clientMessageTimeout :: !NominalDiffTime
-  } deriving Show 
-
--- | Default values for options of live profiler client
-defaultLiveProfileClientOpts :: LiveProfileClientOpts
-defaultLiveProfileClientOpts = LiveProfileClientOpts {
-    clientTargetAddr = SocketAddressInet6 inet6Loopback 8242 0 0
-  , clientMessageTimeout = fromIntegral (360 :: Int)
   }

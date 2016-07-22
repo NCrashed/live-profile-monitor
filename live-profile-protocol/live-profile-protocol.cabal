@@ -15,13 +15,15 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:
+    Profile.Live.Protocol.Collector
+    Profile.Live.Protocol.Message
+    Profile.Live.Protocol.Splitter
     Profile.Live.Protocol.State
     Profile.Live.Protocol.State.Capability
     Profile.Live.Protocol.State.Task
     Profile.Live.Protocol.State.Thread
-    Profile.Live.Protocol.Collector
-    Profile.Live.Protocol.Message
-    Profile.Live.Protocol.Splitter
+    Profile.Live.Protocol.Utils
+    Profile.Live.Termination
   build-depends:       
       base >= 4.7 && < 5
     , binary >= 0.7.6.1
@@ -32,9 +34,11 @@ library
     , fast-logger >= 2.4
     , ghc-events >= 0.5
     , mtl >= 2.2
+    , socket >= 0.6
+    , storable-endian >= 0.2.5
     , time >= 1.6
     , unordered-containers >= 0.2.7
-    
+
   default-language:    Haskell2010
   default-extensions:
     BangPatterns

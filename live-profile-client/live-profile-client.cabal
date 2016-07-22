@@ -18,8 +18,19 @@ library
     Profile.Live.Client
   build-depends:       
       base >= 4.7 && < 5
+    , deepseq >= 1.4
+    , fast-logger >= 2.4
+    , ghc-events >= 0.5
     , live-profile-protocol == 0.1.*
+    , mtl >= 2.2
+    , socket >= 0.6
+    , time >= 1.6
+    
   default-language:    Haskell2010
+  default-extensions:
+    DeriveGeneric
+    OverloadedStrings 
+    RecordWildCards
 
 source-repository head
   type:     git

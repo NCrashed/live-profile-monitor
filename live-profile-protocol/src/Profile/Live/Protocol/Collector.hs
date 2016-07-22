@@ -31,10 +31,6 @@ import qualified Data.Sequence as S
 import Profile.Live.Protocol.Message
 import Profile.Live.Protocol.State
 
--- | Shorthand for 'toLogStr . show'
-showl :: Show a => a -> LogStr
-showl = toLogStr . show 
-
 -- | State of message decoder, helps to collect partial and blocked messages into
 -- ordinal 'Event'
 data MessageCollector = MessageCollector {

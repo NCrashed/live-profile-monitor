@@ -9,10 +9,12 @@ import Control.Exception (bracket)
 import Control.Monad (void, when)
 import Data.IORef
 import Data.Maybe
+import Data.Monoid 
 import Debug.Trace
 import Foreign hiding (void)
 import GHC.RTS.Events hiding (ThreadId)
 import GHC.RTS.EventsIncremental 
+import System.Log.FastLogger
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as B 
@@ -20,6 +22,7 @@ import qualified Data.ByteString.Unsafe as B
 import Profile.Live.Options 
 import Profile.Live.Pipe 
 import Profile.Live.Protocol.State 
+import Profile.Live.Protocol.Utils 
 import Profile.Live.State 
 import Profile.Live.Termination
 

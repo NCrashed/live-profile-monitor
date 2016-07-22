@@ -7,11 +7,6 @@ module Profile.Live(
   , eventLogListenPort
   , eventChannelMaximumSize
   , eventMessageMaxSize
-  -- ** Client side
-  , LiveProfileClientOpts
-  , defaultLiveProfileClientOpts
-  , clientTargetAddr
-  , clientMessageTimeout
   -- * Basic API
   , LiveProfiler
   , initLiveProfile
@@ -30,6 +25,7 @@ import Profile.Live.Parser
 import Profile.Live.Server
 import Profile.Live.State 
 import Profile.Live.Termination 
+import Profile.Live.Protocol.Utils 
 
 -- | Initialize live profile monitor that accepts connections
 -- from remote tools and tracks state of eventlog protocol.

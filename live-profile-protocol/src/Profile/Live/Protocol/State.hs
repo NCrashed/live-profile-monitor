@@ -17,16 +17,22 @@ module Profile.Live.Protocol.State(
     EventlogState
   , newEventlogState
   , updateEventlogState
+  , showl
   ) where 
 
 import Control.DeepSeq 
 import Data.Binary.Serialise.CBOR
 import GHC.Generics 
 import GHC.RTS.Events 
+import System.Log.FastLogger
 
 import Profile.Live.Protocol.State.Capability
 import Profile.Live.Protocol.State.Task
 import Profile.Live.Protocol.State.Thread
+
+-- | Shorthand for 'toLogStr . show'
+showl :: Show a => a -> LogStr
+showl = toLogStr . show 
 
 -- | Storage of all state of eventlog protocol.
 --

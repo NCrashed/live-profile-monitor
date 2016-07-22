@@ -2,18 +2,6 @@ module Profile.Live.State(
     EventTypeChan
   , EventChan
   , LiveProfiler(..)
-  -- * Helpers
-  , whenJust
-  , logProf
-  , logProf'
-  , labelCurrentThread
-  -- * Reexports
-  , Monoid(..)
-  , (<>)
-  , LoggerSet
-  , LogStr
-  , ToLogStr(..)
-  , showl
   ) where 
 
 import Control.Concurrent
@@ -60,25 +48,3 @@ data LiveProfiler = LiveProfiler {
   -- will spam into logger about the accident.
 , eventChan :: !EventChan
 }
-
-whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
-whenJust Nothing _ = pure ()
-whenJust (Just x) m = m x 
-
--- | Helper to log in live profiler
-logProf :: LoggerSet -> LogStr -> IO ()
-logProf logger msg = pushLogStrLn logger $ "Live profiler: " <> msg
-
--- | Helper to log in live profiler, without prefix
-logProf' :: LoggerSet -> LogStr -> IO ()
-logProf' = pushLogStr
-
--- | Shorthand for 'toLogStr . show'
-showl :: Show a => a -> LogStr
-showl = toLogStr . show 
-
--- | Assign label to current thread
-labelCurrentThread :: String -> IO ()
-labelCurrentThread name = do 
-  tid <- myThreadId 
-  labelThread tid ("LiveProfile_" <> name)

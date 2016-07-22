@@ -21,7 +21,6 @@ library
     Profile.Live.Pipe
     Profile.Live.Server
     Profile.Live.State
-    Profile.Live.Termination
   c-sources:
     cbits/pipe.c 
 
