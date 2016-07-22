@@ -27,6 +27,7 @@ main = bracket (startLeech defaultLeechOptions) (const stopLeech) $ const $ do
 
 -}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 module Profile.Live.Leech(
   -- * Options
     LeechOptions
@@ -60,7 +61,11 @@ data LeechOptions = LeechOptions {
 -- | Reasonable default options for leech thread
 defaultLeechOptions :: LeechOptions
 defaultLeechOptions = LeechOptions {
+#ifdef mingw32_HOST_OS
+    leechPipeName = "\\\\.\\pipe\\events"
+#else
     leechPipeName = "events.pipe"
+#endif
   , leechBufferSize = 1024
   , leechDisableEventlogFile = True
   } 
@@ -70,7 +75,7 @@ foreign import ccall "stopLeech" c_stopLeech :: IO ()
 
 -- | Start leech thread that pipes eventlog to external process in background.
 startLeech :: LeechOptions -> IO ()
-startLeech LeechOptions{..} = withCString leechPipeName $ \pname -> do 
+startLeech LeechOptions{..} = withCString leechPipeName $ \pname -> do
   c_startLeech pname leechBufferSize (fromBool leechDisableEventlogFile)
 
 -- | Stopping leech thread and restore all changed RTS options
