@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -------------------------------------------------------------------------------
 -- |
 -- Module      :  Profile.Live.Protocol.State.Capability
@@ -29,7 +30,6 @@ module Profile.Live.Protocol.State.Capability(
 
 import Control.DeepSeq 
 import Data.Binary.Serialise.CBOR 
-import Data.Maybe 
 import Data.Word 
 import GHC.Generics 
 import GHC.RTS.Events 

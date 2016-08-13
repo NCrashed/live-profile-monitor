@@ -277,7 +277,7 @@ stepEventCollector curTime msg = case msg of
           m ev 
 
 -- | Generic collector of partial messages
-collectorPartial :: (MonadState MessageCollector m, MonadWriter LogStr m)
+collectorPartial :: (MonadState MessageCollector m)
   => UTCTime -- ^ Current time
   -> EventMsgPartial -- ^ Message about event block
   -> m (Maybe BS.ByteString)

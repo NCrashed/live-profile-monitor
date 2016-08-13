@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -------------------------------------------------------------------------------
 -- |
 -- Module      :  Profile.Live.Protocol.State.Thread

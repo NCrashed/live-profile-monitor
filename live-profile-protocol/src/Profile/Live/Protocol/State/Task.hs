@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -------------------------------------------------------------------------------
 -- |
 -- Module      :  Profile.Live.Protocol.State.Task
@@ -22,13 +23,10 @@ module Profile.Live.Protocol.State.Task(
 
 import Control.DeepSeq 
 import Data.Binary.Serialise.CBOR 
-import Data.Maybe 
-import Data.Word 
 import GHC.Generics 
 import GHC.RTS.Events 
 
 import qualified Data.HashMap.Strict as H 
-import qualified Data.Sequence as S
 
 deriving instance Generic KernelThreadId
 instance NFData KernelThreadId
