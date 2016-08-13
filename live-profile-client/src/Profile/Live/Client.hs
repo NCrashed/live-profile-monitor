@@ -26,11 +26,7 @@ import Control.DeepSeq
 import Control.Exception 
 import Control.Monad.State.Strict 
 import Control.Monad.Writer.Strict
-import Data.Monoid 
 import Data.Time 
-import Data.Word
-import Foreign hiding (void)
-import Foreign.C.Types 
 import GHC.Generics
 import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
