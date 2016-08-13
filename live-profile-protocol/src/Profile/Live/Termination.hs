@@ -77,14 +77,15 @@ untilTerminated :: MonadIO m => Termination -> IO a -> m ()
 untilTerminated v m = liftIO $ do
   pid <- myThreadId
   ex  <- fmap Termination newUnique
-  handleJust (\e -> if e == ex then Just () else Nothing)
-             (\_ -> return Nothing)
-             (bracket (forkIOWithUnmask $ \unmask ->
-                           unmask $ waitTermination v >> throwTo pid ex)
-                      (uninterruptibleMask_ . killThread)
-                      (\_ -> fmap Just m))
+  _ <- handleJust (\e -> if e == ex then Just () else Nothing)
+                  (\_ -> return Nothing)
+                  (bracket 
+                    (forkIOWithUnmask $ waiter pid ex)
+                    (uninterruptibleMask_ . killThread)
+                    (\_ -> fmap Just m))
   return ()
-  -- #7719 explains why we need uninterruptibleMask_ above.
+  where 
+    waiter pid ex unmask = unmask $ waitTermination v >> throwTo pid ex
 
 -- | Do action until termination flag is set and signal remote thread 
 -- that we are done.
