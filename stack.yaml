@@ -36,8 +36,12 @@ resolver: nightly-2016-06-29
 # non-dependency (i.e. a user package), and its test suites and benchmarks
 # will not be run. This is useful for tweaking upstream packages.
 packages:
-- ghc-events/
-- binary-serialise-cbor/
+- location:
+    git: https://github.com/NCrashed/ghc-events.git
+    commit: 5427e8bc4b14328f25e0700d35c0f09bceb56501
+- location:
+    git: https://github.com/well-typed/binary-serialise-cbor.git
+    commit: 2df417c4faf32204dc702633188f835a74819924
 - live-profile-client/
 - live-profile-leech/
 - live-profile-protocol/
@@ -46,7 +50,6 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- CBOR-0.1.0.1
 - binary-0.7.6.1
 
 # Override default flag values for local packages and extra-deps
