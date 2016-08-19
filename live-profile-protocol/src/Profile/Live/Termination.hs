@@ -18,6 +18,8 @@ module Profile.Live.Termination(
   -- * Core API
     Termination
   , TerminationPair
+  , newTermination
+  , newTerminationPair
   , untilTerminated
   , untilTerminatedPair
   -- * Helpers
@@ -41,6 +43,14 @@ type Termination = MVar ()
 -- the second one is set by terminated client wich helps to hold on
 -- parent thread from exiting too early.
 type TerminationPair = (Termination, Termination)
+
+-- | Create new termination mutex
+newTermination :: MonadIO m => m Termination
+newTermination = liftIO newEmptyMVar
+
+-- | Create new pair of termination mutexes
+newTerminationPair :: MonadIO m => m TerminationPair
+newTerminationPair = (,) <$> newTermination <*> newTermination
 
 -- | Helper to send termination signal to listener
 terminate :: MonadIO m => Termination -> m ()
