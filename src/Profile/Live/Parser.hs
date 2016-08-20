@@ -73,6 +73,7 @@ redirectEventlog logger LiveProfileOpts{..} term eventTypeChan eventChan = do
         whenJust mhmsg $ logProf logger
 
         -- Passing event to event channel (to the server)
+        logProf logger $ "Putting event to channel: " <> showl e
         atomically $ putEvent' e
       Incomplete -> return ()
       Complete -> return ()

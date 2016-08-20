@@ -25,26 +25,27 @@ library
     cbits/pipe.c 
 
   build-depends:       
-      base >= 4.7 && < 5
-    , live-profile-protocol == 0.1.*
-    , binary >= 0.7.6
-    , binary-serialise-cbor >= 0.1.1.0
-    , bytestring >= 0.10
-    , containers >= 0.5.6
-    , deepseq >= 1.4
-    , directory >= 1.2
-    , fast-logger >= 2.4.6
-    , filepath >= 1.4
-    , ghc-events >= 0.5
-    , ghc-prim >= 0.5
-    , mtl >= 2.2 
-    , socket >= 0.6
-    , stm >= 2.4
-    , stm-chans >= 3.0
-    , storable-endian >= 0.2.5
-    , time >= 1.6
-    , transformers >= 0.4.2
-    , unordered-containers >= 0.2.7
+      base                            >= 4.7        && < 5
+    , binary                          >= 0.7.6      && < 0.8
+    , binary-serialise-cbor           >= 0.1.1.0    && < 0.2
+    , bytestring                      >= 0.10       && < 0.11
+    , containers                      >= 0.5.6      && < 0.6
+    , deepseq                         >= 1.4        && < 1.5
+    , directory                       >= 1.2        && < 1.3
+    , fast-logger                     >= 2.4.6      && < 2.5
+    , filepath                        >= 1.4        && < 1.5
+    , ghc-events                      >= 0.5        && < 0.6
+    , ghc-prim                        >= 0.5        && < 0.6
+    , live-profile-protocol           == 0.1.* 
+    , mtl                             >= 2.2        && < 2.3
+    , socket                          >= 0.6        && < 0.7
+    , stm                             >= 2.4        && < 2.5
+    , stm-chans                       >= 3.0        && < 3.1
+    , storable-endian                 >= 0.2.5      && < 0.3
+    , time                            >= 1.6        && < 1.7
+    , transformers                    >= 0.4.2      && < 0.6
+    , unordered-containers            >= 0.2.7      && < 0.3
+
   default-language:    Haskell2010
   default-extensions:
     BangPatterns
@@ -62,10 +63,11 @@ executable hs-live-profile
   ghc-options: -threaded -g
   -- other-modules:
   build-depends:       
-      base >= 4.7 && < 5
+      base                            >= 4.7        && < 5
     , live-profile-monitor
-    , fast-logger >= 2.4.6
-    , process >= 1.4
+    , fast-logger                     >= 2.4.6      && < 2.5
+    , process                         >= 1.4        && < 1.5
+    , optparse-applicative            >= 0.12       && < 0.13
 
   default-language:    Haskell2010
 

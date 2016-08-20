@@ -118,6 +118,7 @@ runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollec
         logProf logger er
         go collector
       Right msg -> do 
+        logProf logger $ showl msg
         curTime <- getCurrentTime
         let stepper = stepMessageCollector curTime msg
         let ((evs, collector'), msgs) = runWriter $ runStateT stepper collector 
