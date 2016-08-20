@@ -145,6 +145,6 @@ runEventSender logger p initialSplitter pausedRef eventChan stateRef header = do
               action = stepSplitter $ Right e 
               ((msgs, splitter''), logMsgs) = runWriter $ runStateT action splitter'
             logProf' logger logMsgs
-            logProf logger $ "Sending event: " <> showl e
+            --logProf logger $ "Sending event: " <> showl e
             mapM_ (sendMessage p) msgs
             splitter'' `deepseq` goMain splitter'' False
