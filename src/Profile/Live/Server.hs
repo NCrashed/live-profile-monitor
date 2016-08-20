@@ -123,7 +123,9 @@ runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateR
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
     case met of 
-      Nothing -> sendHeaderAndGo ets -- header is complete
+      Nothing -> do -- header is complete
+        _ <- tryPutMVar headerRef ets 
+        sendHeaderAndGo ets 
       Just et -> do 
         let ets' = ets S.|> et 
         ets' `seq` goHeader ets'
