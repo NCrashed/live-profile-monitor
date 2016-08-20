@@ -61,29 +61,39 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
     m s
 
   acceptAndHandle :: ServerSocket -> IO ()
-  acceptAndHandle s = do
-    headerRef <- newEmptyMVar
-    forever $ do  
-      res <- accept s
-      uncurry (acceptCon headerRef) res
+  acceptAndHandle s = goHeader mempty
     where 
+    -- first collect header to pass to sender threads
+    goHeader ets = do 
+      met <- atomically $ readTBMChan eventTypeChan
+      case met of 
+        Nothing-> acceptCycle ets -- header is complete
+        Just et -> do 
+          let ets' = ets S.|> et 
+          ets' `seq` goHeader ets'
+
     closeOnExit p addr = bracket (return p) (\p' -> closeCon p' addr) . const 
     closeCon p addr = do 
       close p 
       logProf logger $ "Live profile: closed connection to " <> showl addr
-    acceptCon headerRef p addr = do 
+
+    acceptCycle header = forever $ do  
+      res <- accept s
+      uncurry (acceptCon header) res
+
+    acceptCon header p addr = do 
       logProf logger $ "Accepted connection from " <> showl addr
       -- _ <- listenThread p addr
       let splitter = emptySplitterState $ fromMaybe maxBound eventMessageMaxSize
       splitter' <- sendEventlogState logger p splitter stateRef
-      _ <- senderThread p addr splitter' headerRef
+      _ <- senderThread p addr splitter' header
       return ()
 
     --listenThread p addr = forkIO $ closeOnExit p addr $ 
     --  forever yield -- TODO: add service messages listener
-    senderThread p addr splitter headerRef = forkIO $ closeOnExit p addr $ do
+    senderThread p addr splitter header = forkIO $ closeOnExit p addr $ do
       labelCurrentThread $ "Sender_" <> show addr
-      runEventSender logger p splitter pausedRef eventTypeChan eventChan stateRef headerRef
+      runEventSender logger p splitter pausedRef eventChan stateRef header
 
 -- Send full state to the remote host
 sendEventlogState :: LoggerSet 
@@ -104,14 +114,12 @@ runEventSender :: LoggerSet -- ^ Where to spam about everthing
   -> ServerSocket -- ^ Socket where we send the messages about eventlog
   -> SplitterState
   -> IORef Bool -- ^ When value set to true, the sender won't send events to remote side
-  -> EventTypeChan -- ^ Channel to read eventlog header from
   -> EventChan -- ^ Channel to read events from
   -> IORef EventlogState -- ^ Reference with global eventlog state
-  -> MVar (S.Seq EventType) -- ^ Reference with global event log header, once filled, never changes
+  -> S.Seq EventType -- ^ Global event log header, once filled, never changes
   -> IO ()
-runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateRef headerRef = do 
-  mheader <- tryReadMVar headerRef
-  maybe (goHeader S.empty) sendHeaderAndGo mheader
+runEventSender logger p initialSplitter pausedRef eventChan stateRef header = do 
+  sendHeaderAndGo header
   where 
   sendHeader ets = do 
     let msgs = mkHeaderMsgs ets
@@ -119,16 +127,6 @@ runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateR
   sendHeaderAndGo ets = do 
     sendHeader ets
     goMain initialSplitter False
-
-  goHeader ets = do 
-    met <- atomically $ readTBMChan eventTypeChan
-    case met of 
-      Nothing -> do -- header is complete
-        _ <- tryPutMVar headerRef ets 
-        sendHeaderAndGo ets 
-      Just et -> do 
-        let ets' = ets S.|> et 
-        ets' `seq` goHeader ets'
 
   goMain splitter oldPaused = do 
     me <- atomically $ readTBMChan eventChan
