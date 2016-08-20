@@ -14,6 +14,7 @@ import Control.Monad.Writer.Strict (runWriter)
 import Data.IORef 
 import Data.Maybe
 import Data.Monoid 
+import GHC.RTS.Events hiding (ThreadId)
 import System.Log.FastLogger
 
 import Profile.Live.Options 
@@ -60,27 +61,29 @@ startLiveServer logger LiveProfileOpts{..} term pausedRef eventTypeChan eventCha
     m s
 
   acceptAndHandle :: ServerSocket -> IO ()
-  acceptAndHandle s = forever $ do  
-    res <- accept s
-    uncurry acceptCon res
+  acceptAndHandle s = do
+    headerRef <- newEmptyMVar
+    forever $ do  
+      res <- accept s
+      uncurry (acceptCon headerRef) res
     where 
     closeOnExit p addr = bracket (return p) (\p' -> closeCon p' addr) . const 
     closeCon p addr = do 
       close p 
       logProf logger $ "Live profile: closed connection to " <> showl addr
-    acceptCon p addr = do 
+    acceptCon headerRef p addr = do 
       logProf logger $ "Accepted connection from " <> showl addr
       -- _ <- listenThread p addr
       let splitter = emptySplitterState $ fromMaybe maxBound eventMessageMaxSize
       splitter' <- sendEventlogState logger p splitter stateRef
-      _ <- senderThread p addr splitter'
+      _ <- senderThread p addr splitter' headerRef
       return ()
 
     --listenThread p addr = forkIO $ closeOnExit p addr $ 
     --  forever yield -- TODO: add service messages listener
-    senderThread p addr splitter = forkIO $ closeOnExit p addr $ do
+    senderThread p addr splitter headerRef = forkIO $ closeOnExit p addr $ do
       labelCurrentThread $ "Sender_" <> show addr
-      runEventSender logger p splitter pausedRef eventTypeChan eventChan stateRef
+      runEventSender logger p splitter pausedRef eventTypeChan eventChan stateRef headerRef
 
 -- Send full state to the remote host
 sendEventlogState :: LoggerSet 
@@ -104,16 +107,23 @@ runEventSender :: LoggerSet -- ^ Where to spam about everthing
   -> EventTypeChan -- ^ Channel to read eventlog header from
   -> EventChan -- ^ Channel to read events from
   -> IORef EventlogState -- ^ Reference with global eventlog state
+  -> MVar (S.Seq EventType) -- ^ Reference with global event log header, once filled, never changes
   -> IO ()
-runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateRef = goHeader S.empty
+runEventSender logger p initialSplitter pausedRef eventTypeChan eventChan stateRef headerRef = do 
+  mheader <- tryReadMVar headerRef
+  maybe (goHeader S.empty) sendHeaderAndGo mheader
   where 
+  sendHeader ets = do 
+    let msgs = mkHeaderMsgs ets
+    mapM_ (sendMessage p . ProfileHeader) msgs
+  sendHeaderAndGo ets = do 
+    sendHeader ets
+    goMain initialSplitter False
+
   goHeader ets = do 
     met <- atomically $ readTBMChan eventTypeChan
     case met of 
-      Nothing -> do -- header is complete
-        let msgs = mkHeaderMsgs ets
-        mapM_ (sendMessage p . ProfileHeader) msgs
-        goMain initialSplitter False
+      Nothing -> sendHeaderAndGo ets -- header is complete
       Just et -> do 
         let ets' = ets S.|> et 
         ets' `seq` goHeader ets'
