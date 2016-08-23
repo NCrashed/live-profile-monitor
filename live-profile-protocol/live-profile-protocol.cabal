@@ -25,19 +25,18 @@ library
     Profile.Live.Protocol.Utils
     Profile.Live.Termination
   build-depends:       
-      base >= 4.7 && < 5
-    , binary >= 0.7.6.1
-    , binary-serialise-cbor >= 0.1.1.0
-    , bytestring >= 0.10.8
-    , containers >= 0.5.7
-    , deepseq >= 1.4
-    , fast-logger >= 2.4
-    , ghc-events >= 0.5
-    , mtl >= 2.2
-    , socket >= 0.6
-    , storable-endian >= 0.2.5
-    , time >= 1.6
-    , unordered-containers >= 0.2.7
+      base                    >= 4.7      && < 5
+    , binary                  >= 0.7.6.1  && < 0.9
+    , binary-serialise-cbor   >= 0.1.1.0  && < 0.2
+    , bytestring              >= 0.10.8   && < 0.11
+    , containers              >= 0.5.7    && < 0.6
+    , deepseq                 >= 1.4      && < 1.5
+    , fast-logger             >= 2.4      && < 2.5
+    , ghc-events              >= 0.5      && < 0.6
+    , mtl                     >= 2.2      && < 2.3
+    , socket                  >= 0.6      && < 0.7
+    , time                    >= 1.6      && < 1.7
+    , unordered-containers    >= 0.2.7    && < 0.3
 
   default-language:    Haskell2010
   default-extensions:
