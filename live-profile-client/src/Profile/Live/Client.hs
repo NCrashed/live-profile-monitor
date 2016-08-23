@@ -108,7 +108,7 @@ runEventListener :: LoggerSet -- ^ Where to spam about everything
   -> IO ()
 runEventListener logger p msgTimeout ClientBehavior{..} = go (emptyMessageCollector msgTimeout)
   where 
-  go collector = do 
+  go collector = do
     mmsg <- recieveMessage p
     case mmsg of 
       Left MsgEndOfInput -> do 

@@ -50,13 +50,23 @@ data ReceiveMsgError =
   | MsgEndOfInput
   deriving (Generic)
 
+-- | Helper to receive all requested bytes
+receiveWaitAll :: Socket i str p -> Int -> IO B.ByteString 
+receiveWaitAll p size = go mempty size
+  where 
+  go !bs !n 
+    | n > 0 = do 
+      bs' <- receive p n msgNoSignal
+      go (bs <> bs') (n - B.length bs')
+    | otherwise = return bs 
+
 -- | Helper to read next message from the socket
 recieveMessage :: Socket i str p -> IO (Either ReceiveMsgError ProfileMsg)
 recieveMessage p = runExceptT $ do 
-  lbytes <- liftIO $ receive p 4 msgNoSignal
+  lbytes <- liftIO $ receiveWaitAll p 4
   guardEndOfInput lbytes 
   (l :: Word32) <- liftIO $ BS.unsafeUseAsCString lbytes $ peekBE . castPtr
-  msgbytes <- liftIO $ receive p (fromIntegral l) msgNoSignal
+  msgbytes <- liftIO $ receiveWaitAll p (fromIntegral l)
   guardEndOfInput msgbytes 
   case deserialiseOrFail $ BS.fromStrict msgbytes of 
     Left er -> throwError . MsgDeserialisationFail $ "Failed to deserialize message: " 
