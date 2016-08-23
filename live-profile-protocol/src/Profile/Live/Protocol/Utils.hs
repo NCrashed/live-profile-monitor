@@ -64,10 +64,12 @@ receiveWaitAll p size = go mempty size
 recieveMessage :: Socket i str p -> IO (Either ReceiveMsgError ProfileMsg)
 recieveMessage p = runExceptT $ do 
   lbytes <- liftIO $ receiveWaitAll p 4
-  guardEndOfInput lbytes 
+  guardEndOfInput lbytes
+  guardLength 4 lbytes 
   (l :: Word32) <- liftIO $ BS.unsafeUseAsCString lbytes $ peekBE . castPtr
   msgbytes <- liftIO $ receiveWaitAll p (fromIntegral l)
   guardEndOfInput msgbytes 
+  guardLength (fromIntegral l) msgbytes
   case deserialiseOrFail $ BS.fromStrict msgbytes of 
     Left er -> throwError . MsgDeserialisationFail $ "Failed to deserialize message: " 
         <> showl er <> ", payload: " <> showl msgbytes
@@ -75,6 +77,10 @@ recieveMessage p = runExceptT $ do
   where 
   guardEndOfInput bs | B.null bs = throwError MsgEndOfInput
                      | otherwise = return ()
+  guardLength n bs 
+    | B.length bs == n = return ()
+    | otherwise = throwError $ MsgDeserialisationFail $ "Not matched length of message: "
+      <> "expected " <> showl n <> ", recieved " <> showl (B.length bs)
 
 -- | Helper to write message into socket
 sendMessage :: Socket i str p -> ProfileMsg -> IO ()
