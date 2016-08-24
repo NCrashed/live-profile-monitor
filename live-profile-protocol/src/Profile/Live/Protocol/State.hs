@@ -49,6 +49,8 @@ data EventlogState = EventlogState {
   , eventlogTasks :: !TasksState
     -- | If 'Just' the GC is performed and the value contains time of GC begin
   , eventlogGC :: !(Maybe Timestamp)
+    -- | Last update timestamp
+  , eventlogTime :: !Timestamp
   } deriving (Generic, Show)
 
 instance NFData EventlogState
@@ -62,17 +64,20 @@ newEventlogState = EventlogState {
   , eventlogCaps = newCapsState 
   , eventlogTasks = newTasksState
   , eventlogGC = Nothing
+  , eventlogTime = 0
   }
 
 -- | Update state with next event
 updateEventlogState :: Event -> EventlogState -> EventlogState
 updateEventlogState !e !es 
-  | isThreadEvent e = es { eventlogThreads = updateThreadsState e (eventlogThreads es) }
-  | isCapsetEvent e = es { eventlogCapsets = updateCapsetsState e (eventlogCapsets es) }
-  | isCapEvent e = es { eventlogCaps = updateCapsState e (eventlogCaps es) }
-  | isTaskEvent e = es { eventlogTasks = updateTasksState e (eventlogTasks es) }
-  | isGCEvent e = es { eventlogGC = updateGCState e (eventlogGC es) }
+  | isThreadEvent e = es' { eventlogThreads = updateThreadsState e (eventlogThreads es) }
+  | isCapsetEvent e = es' { eventlogCapsets = updateCapsetsState e (eventlogCapsets es) }
+  | isCapEvent e = es' { eventlogCaps = updateCapsState e (eventlogCaps es) }
+  | isTaskEvent e = es' { eventlogTasks = updateTasksState e (eventlogTasks es) }
+  | isGCEvent e = es' { eventlogGC = updateGCState e (eventlogGC es) }
   | otherwise = es 
+  where 
+  es' = es { eventlogTime = evTime e }
 
 -- | Update current GC state
 updateGCState :: Event -> Maybe Timestamp -> Maybe Timestamp
