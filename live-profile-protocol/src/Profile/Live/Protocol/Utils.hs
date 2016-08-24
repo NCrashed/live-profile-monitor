@@ -67,8 +67,7 @@ recieveMessage p = runExceptT $ do
   guardEndOfInput lbytes
 
   let (l :: Word32) = G.runGet G.getWord32be $ BS.fromStrict lbytes
-  liftIO $ putStrLn $ "Receiving " <> show l <> " bytes... " <> show lbytes 
-  
+
   msgbytes <- liftIO $ receiveWaitAll p (fromIntegral l)
   guardEndOfInput msgbytes 
   case deserialiseOrFail $ BS.fromStrict msgbytes of 
