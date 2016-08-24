@@ -14,7 +14,7 @@
 --
 ------------------------------------------------------------------------------
 module Profile.Live.Protocol.State.Thread(
-    ThreadExecutionState
+    ThreadExecutionState(..)
   , ThreadState(..)
   , isSparkThread
   , isThreadEvent
