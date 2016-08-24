@@ -14,7 +14,7 @@
 --
 ------------------------------------------------------------------------------
 module Profile.Live.Protocol.State(
-    EventlogState
+    EventlogState(..)
   , newEventlogState
   , updateEventlogState
   , showl
