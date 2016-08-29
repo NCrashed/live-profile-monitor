@@ -1,5 +1,5 @@
 name:                live-profile-protocol
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Shared code between client and server for live profiling.
 description:         Please see README.md
 homepage:            https://github.com/ncrashed/live-profile-monitor#readme
@@ -11,6 +11,9 @@ copyright:           2016 Anton Gushcha
 category:            Development, GHC, Debug, Profiling, Trace
 build-type:          Simple
 cabal-version:       >=1.10
+extra-source-files:
+  README.md
+  CHANGELOG.md
 
 library
   hs-source-dirs:      src

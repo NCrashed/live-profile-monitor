@@ -17,6 +17,7 @@ module Profile.Live.Protocol.Utils(
   , sendMessage
   -- * General utils
   , printExceptions
+  , trackTermination
   , whenJust
   , logProf
   , logProf'
@@ -102,6 +103,19 @@ printExceptions :: String -> IO a -> IO a
 printExceptions s m = catch m $ \(e :: SomeException) -> do
   putStrLn $ s ++ ":" ++ show e 
   throw e 
+
+-- | When thread leaves scope of inner computation call the callback
+--
+-- Note: the exception is always rethrown.
+trackTermination :: (Maybe SomeException -> IO ()) -> IO a -> IO a
+trackTermination track ma = catch ma' $ \(e :: SomeException) -> do
+  track (Just e)
+  throw e
+  where 
+  ma' = do 
+    a <- ma
+    track Nothing
+    return a 
 
 -- | Do thing only when value is 'Just'
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()

@@ -66,6 +66,7 @@ data ClientBehavior = ClientBehavior {
 , clientOnEvent :: !(Event -> IO ()) -- ^ Callback that is called when the client receives a remote event
 , clientOnService :: !(ServiceMsg -> IO ()) -- ^ Callback that is called when the client receives service message from the server
 , clientOnState :: !(EventlogState -> IO ()) -- ^ Callback that is called when the client receives dump of eventlog alive objects
+, clientOnExit :: !(Maybe SomeException -> IO ()) -- ^ Callback that is called when client thread is terminated by exception or by normal way.
 } deriving (Generic)
 
 -- | Client behavior that does nothing
@@ -75,6 +76,7 @@ defaultClientBehavior = ClientBehavior {
   , clientOnEvent = const $ return ()
   , clientOnService = const $ return ()
   , clientOnState = const $ return ()
+  , clientOnExit = const $ return ()
   }
 
 -- | Connect to remote app and recieve eventlog from it.
@@ -83,22 +85,24 @@ startLiveClient :: LoggerSet -- ^ Monitor logging messages sink
   -> TerminationPair  -- ^ Termination protocol
   -> ClientBehavior -- ^ User specified callbacks 
   -> IO ThreadId -- ^ Starts new thread that connects to remote host and 
-startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ printExceptions "Live client" $ do 
-  labelCurrentThread "Client"
-  untilTerminatedPair term $ bracket socket clientClose $ \s -> do
-    connect s clientTargetAddr
-    clientBody s
-  logProf logger "Client thread terminated"
-  where
-  clientClose s = do 
-    logProf logger "Client disconnected"
-    close s 
-  clientBody s = do 
-    logProf logger $ "Client thread started and connected to " <> showl clientTargetAddr
-    runEventListener logger s clientMessageTimeout cb
-    --_ <- senderThread s
+startLiveClient logger LiveProfileClientOpts{..} term cb = forkIO $ 
+  trackTermination (clientOnExit cb) $ 
+  printExceptions "Live client" $ do 
+    labelCurrentThread "Client"
+    untilTerminatedPair term $ bracket socket clientClose $ \s -> do
+      connect s clientTargetAddr
+      clientBody s
+    logProf logger "Client thread terminated"
+    where
+    clientClose s = do 
+      logProf logger "Client disconnected"
+      close s 
+    clientBody s = do 
+      logProf logger $ "Client thread started and connected to " <> showl clientTargetAddr
+      runEventListener logger s clientMessageTimeout cb
+      --_ <- senderThread s
 
-  --senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
+    --senderThread _ = forkIO $ forever yield -- TODO: implement service msg passing
 
 -- | Helper for creation listening threads that accepts eventlog messages from socket
 runEventListener :: LoggerSet -- ^ Where to spam about everything
