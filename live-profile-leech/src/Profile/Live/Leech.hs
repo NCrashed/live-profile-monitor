@@ -38,9 +38,18 @@ module Profile.Live.Leech(
   -- * Start/stop leeching events
   , startLeech
   , stopLeech
+  -- * User events and helpers
+  , traceStartLiveEvent
+  , traceStopLiveEvent
+  , traceStartLiveEventM
+  , traceStopLiveEventM
+  , withLiveEventM
+  , withLiveEventIO
   ) where 
 
+import Control.Exception (bracket)
 import Data.Word 
+import Debug.Trace (trace, traceM)
 import Foreign.C 
 import Foreign.Marshal.Utils 
 
@@ -81,3 +90,48 @@ startLeech LeechOptions{..} = withCString leechPipeName $ \pname -> do
 -- | Stopping leech thread and restore all changed RTS options
 stopLeech :: IO ()
 stopLeech = c_stopLeech
+
+-- | Record start of user event
+--
+-- Note: name of event should correspond one that was used in 'traceStopLiveEvent'
+traceStartLiveEvent :: String -- ^ Event name
+  -> a -> a 
+traceStartLiveEvent name = trace ("START " ++ name)
+
+-- | Record end of user event
+-- 
+-- Note: name of event should correspond one that was used in 'traceStartLiveEvent'
+traceStopLiveEvent :: String -- ^ Event name
+  -> a -> a 
+traceStopLiveEvent name = trace ("END " ++ name)
+
+-- | Applicative version of 'traceStartLiveEvent' that can be used in do notation
+-- 
+-- Note: name of event should correspond one that was used in 'traceStopLiveEventM'
+traceStartLiveEventM :: Applicative f => String -- ^ Name of event
+  -> f ()
+traceStartLiveEventM name = traceM ("START " ++ name)
+
+-- | Applicative version of 'traceStopLiveEvent' that can be used in do notation
+-- 
+-- Note: name of event should correspond one that was used in 'traceStartLiveEventM'
+traceStopLiveEventM :: Applicative f => String -- ^ Name of event
+  -> f ()
+traceStopLiveEventM name = traceM ("END " ++ name)
+
+-- | Tags action with event, that starts when the inner computation starts and
+-- ends when it ends.
+withLiveEventM :: Applicative f => String -- ^ Name of event
+  -> f a -> f a
+withLiveEventM name f = 
+  traceStartLiveEventM name 
+  *> f <*
+  traceStopLiveEventM name 
+
+-- | Tags action with event, that starts when the inner computation starts and
+-- ends when it ends.
+--
+-- Note: the version is exception safe unlike the `withLiveEventM`
+withLiveEventIO :: String -- ^ Name of event
+  -> IO a -> IO a
+withLiveEventIO name = bracket (traceStartLiveEventM name) (const $ traceStopLiveEventM name) . const

@@ -1,5 +1,5 @@
 name:                live-profile-leech
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Application side library that you need to enable live profiling for your application.
 description:         Please see README.md
 homepage:            https://github.com/ncrashed/live-profile-monitor#readme
