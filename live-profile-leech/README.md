@@ -32,34 +32,27 @@ main = bracket (startLeech defaultLeechOptions) (const stopLeech) $ const $ do
 -- Note: name of event should correspond one that was used in 'traceStopLiveEvent'
 traceStartLiveEvent :: String -- ^ Event name
   -> a -> a 
-
+  
 -- | Record end of user event
 -- 
 -- Note: name of event should correspond one that was used in 'traceStartLiveEvent'
 traceStopLiveEvent :: String -- ^ Event name
   -> a -> a 
 
--- | Applicative version of 'traceStartLiveEvent' that can be used in do notation
+-- | IO version of 'traceStartLiveEvent' that can be used in do notation
 -- 
--- Note: name of event should correspond one that was used in 'traceStopLiveEventM'
-traceStartLiveEventM :: Applicative f => String -- ^ Name of event
-  -> f ()
+-- Note: name of event should correspond one that was used in 'traceStopLiveEventIO'
+traceStartLiveEventIO :: String -- ^ Name of event
+  -> IO ()
 
--- | Applicative version of 'traceStopLiveEvent' that can be used in do notation
+-- | IO version of 'traceStopLiveEvent' that can be used in do notation
 -- 
--- Note: name of event should correspond one that was used in 'traceStartLiveEventM'
-traceStopLiveEventM :: Applicative f => String -- ^ Name of event
-  -> f ()
+-- Note: name of event should correspond one that was used in 'traceStartLiveEventIO'
+traceStopLiveEventIO :: String -- ^ Name of event
+  -> IO ()
 
 -- | Tags action with event, that starts when the inner computation starts and
 -- ends when it ends.
-withLiveEventM :: Applicative f => String -- ^ Name of event
-  -> f a -> f a
-  
--- | Tags action with event, that starts when the inner computation starts and
--- ends when it ends.
---
--- Note: the version is exception safe unlike the `withLiveEventM`
 withLiveEventIO :: String -- ^ Name of event
   -> IO a -> IO a
 ```
